@@ -1,0 +1,11 @@
+[package]
+name = "hunter-bot"
+version = "1.0.0-dev"
+authors = ["Cyberunner23 <narutoxela@gmail.com>"]
+
+[dependencies]
+clap       = "*"
+hyper      = "*"
+openssl    = "*"
+serde      = "*"
+serde_json = "*"
