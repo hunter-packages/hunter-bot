@@ -8,7 +8,7 @@
 
 fn main() {
 
-    let hunter_bot_version = "1.0.0-dev";
+    let hunter_bot_version = "0.1.0";
 
     //Print welcome message
     println!("╔══════════════════════════════════════════════════════════╗");
