@@ -1,6 +1,13 @@
 //Copyright (c) 2016, Ruslan Baratov, Alex Frappier Lachapelle
 //All rights reserved.
 
+use std::sync::mpsc::channel;
+use std::thread;
+use std::process::exit;
+
+mod config;
+
+//TODO: Output to log.
 
 ////////////////////////////////////////////////////////////
 //                          Main                          //
@@ -8,11 +15,29 @@
 
 fn main() {
 
-    let hunter_bot_version = "0.1.0";
+    let hunter_bot_config_path = "./HunterBotConfig.toml";
 
-    //Print welcome message
-    println!("╔══════════════════════════════════════════════════════════╗");
-    println!("║                Welcome to the Hunter Bot.                ║");
-    println!("╚══════════════════════════════════════════════════════════╝");
+
+    ////////////////////////////////////////////////////////////
+    //                       Load Config                      //
+    ////////////////////////////////////////////////////////////
+
+    let mut config = config::ConfigHandler::new();
+    println!("Opening config...");
+
+    match config.load(&hunter_bot_config_path.to_string()) {
+        Ok(())   => {println!("Success!");}
+        Err(err) => {
+            println!("Error! {}", err);
+            println!("Exiting...");
+            exit(-1);
+        }
+    }
+
+
+    ////////////////////////////////////////////////////////////
+    //                    Setup Webhooks                      //
+    ////////////////////////////////////////////////////////////
+
 
 }

@@ -4,8 +4,9 @@ version = "0.1.0"
 authors = ["Cyberunner23 <narutoxela@gmail.com>"]
 
 [dependencies]
-clap       = "*"
 hyper      = "*"
+iron       = "*"
 openssl    = "*"
 serde      = "*"
 serde_json = "*"
+toml       = "*"
