@@ -5,7 +5,11 @@ use std::sync::mpsc::channel;
 use std::thread;
 use std::process::exit;
 
+extern crate hyper;
+
 mod config;
+mod utilities;
+mod webhooks;
 
 //TODO: Output to log.
 
@@ -39,5 +43,8 @@ fn main() {
     //                    Setup Webhooks                      //
     ////////////////////////////////////////////////////////////
 
+    //setup
+    webhooks::register(&mut config);
+    //listen
 
 }

@@ -189,6 +189,17 @@ impl ConfigHandler {
 
     //Is the user in the whitelist?
     pub fn whitelist_validate_user(&mut self, user: String) -> bool {
+
+        //Repo owner is always whitelisted
+        match ConfigHandler::get_string(self, "config", "github_owner_name") {
+            Ok(owner_name) => {
+                if owner_name == user {
+                    return true;
+                }
+            }
+            Err(_)         => return false
+        }
+
         let whitelist: Vec<toml::Value>;
         match self.get_array("config", "whitelist") {
             Ok(_whitelist) => whitelist = _whitelist,

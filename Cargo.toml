@@ -7,6 +7,7 @@ authors = ["Cyberunner23 <narutoxela@gmail.com>"]
 hyper      = "*"
 iron       = "*"
 openssl    = "*"
+rand       = "*"
 serde      = "*"
 serde_json = "*"
 toml       = "*"
