@@ -38,13 +38,10 @@ fn main() {
         }
     }
 
-
-    ////////////////////////////////////////////////////////////
-    //                    Setup Webhooks                      //
-    ////////////////////////////////////////////////////////////
-
-    //setup
+    //Setup webhooks
     webhooks::register(&mut config);
-    //listen
+
+    //Listen for/process webhooks
+    webhooks::listen(&mut config);
 
 }

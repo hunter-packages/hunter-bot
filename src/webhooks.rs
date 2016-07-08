@@ -4,6 +4,11 @@
 use std::collections::BTreeMap;
 use std::error::Error;
 
+
+extern crate iron;
+use self::iron::prelude::*;
+use self::iron::status;
+
 extern crate rand;
 use self::rand::Rng;
 
@@ -12,6 +17,7 @@ extern crate serde_json;
 
 use config;
 use utilities;
+
 
 ////////////////////////////////////////////////////////////
 //                          Funcs                         //
@@ -32,9 +38,9 @@ pub fn register(config: &mut config::ConfigHandler) {
     //Skip secret number generation if we already made one before
     //Get webhook secret
     let mut github_webhook_secret = String::new();
-    match config.get_string("config", "github_webhook_secret") {
+    match config.get_string("state", "github_webhook_secret") {
         Ok(_github_webhook_secret) => github_webhook_secret = _github_webhook_secret,
-        Err(err)          => {panic!("Error getting  the \"github_webhook_secret\" value from config: {}", err);}
+        Err(err)                   => {panic!("Error getting  the \"github_webhook_secret\" value from config: {}", err);}
     }
 
     if github_webhook_secret == String::new() {
@@ -116,3 +122,50 @@ pub fn register(config: &mut config::ConfigHandler) {
 
     println!("Success!")
 }
+
+
+pub fn testreceiver(request: &mut Request) -> IronResult<Response> {
+    println!("-----------------------------------------------------------");
+    println!("url:         {:?}", request.url);
+    println!("remote_addr: {:?}", request.remote_addr);
+    println!("local_addr:  {:?}", request.local_addr);
+    println!("headers:     {:?}", request.headers);
+    //println!("body:        {:?}", request.body); ///////////////////////
+    println!("method:      {:?}", request.method);
+    //println!("extensions:  {:?}", request.extensions);
+    Ok(Response::with((status::Ok, "Hello World!")))
+}
+
+
+pub fn listen(config: &mut config::ConfigHandler) {
+
+    //Start server thread
+    Iron::new(testreceiver).http("0.0.0.0:3000").unwrap();
+    //Process events
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
