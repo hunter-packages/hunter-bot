@@ -50,8 +50,8 @@ pub fn register(config: &mut config::ConfigHandler) {
             Err(err) => panic!("Failed to obtain OS RNG: {}", err)
         };
 
-        let github_webhook_secret = rng.next_u64().to_string();
-        config.set_string("state", "github_webhook_secret", &github_webhook_secret[..]);
+        github_webhook_secret = rng.next_u64().to_string();
+        config.set_string("state", "github_webhook_secret", &github_webhook_secret.clone()[..]);
         match config.save() {
             Ok(()) => (),
             Err(_) => {panic!("Failed to save the config file.");}
