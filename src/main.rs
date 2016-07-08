@@ -1,31 +1,20 @@
 //Copyright (c) 2016, Ruslan Baratov, Alex Frappier Lachapelle
 //All rights reserved.
 
-use std::sync::mpsc::channel;
-use std::thread;
 use std::process::exit;
 
 extern crate hyper;
 
 mod config;
-mod utilities;
 mod webhooks;
 
 //TODO: Output to log.
-
-////////////////////////////////////////////////////////////
-//                          Main                          //
-////////////////////////////////////////////////////////////
 
 fn main() {
 
     let hunter_bot_config_path = "./HunterBotConfig.toml";
 
-
-    ////////////////////////////////////////////////////////////
-    //                       Load Config                      //
-    ////////////////////////////////////////////////////////////
-
+    //Load config
     let mut config = config::ConfigHandler::new();
     println!("Opening config...");
 
@@ -43,5 +32,4 @@ fn main() {
 
     //Listen for/process webhooks
     webhooks::listen(&mut config);
-
 }
