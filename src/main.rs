@@ -14,6 +14,9 @@ fn main() {
 
     let hunter_bot_config_path = "./HunterBotConfig.toml";
 
+    //TODO:
+    //Start logger
+
     //Load config
     let mut config = config::ConfigHandler::new();
     println!("Opening config...");

@@ -5,7 +5,9 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::Read;
 use std::mem;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
 
 extern crate hyper;
@@ -27,6 +29,9 @@ use self::openssl::crypto::hmac::hmac;
 extern crate rand;
 use self::rand::Rng;
 
+extern crate regex;
+use self::regex::Regex;
+
 extern crate serde;
 extern crate serde_json;
 
@@ -34,25 +39,21 @@ use config;
 
 
 ////////////////////////////////////////////////////////////
-//                        Structs                         //
+//                     WebhookHandler                     //
 ////////////////////////////////////////////////////////////
 
 pub struct WebhookHandler {
-    config: Arc<Mutex<config::ConfigHandler>>
-    //mpsc tx
+    config:   Arc<Mutex<config::ConfigHandler>>,
+    queue_tx: Arc<Mutex<Sender<WebhookEvent>>>
     //logger tx
 }
 
-
-////////////////////////////////////////////////////////////
-//                         Impls                          //
-////////////////////////////////////////////////////////////
-
 impl WebhookHandler {
-    pub fn new(tsconfig: Arc<Mutex<config::ConfigHandler>>) -> WebhookHandler {
+    pub fn new(tsconfig: Arc<Mutex<config::ConfigHandler>>, queue: Arc<Mutex<Sender<WebhookEvent>>>) -> WebhookHandler {
         WebhookHandler{
-            config: tsconfig.clone()
+            config: tsconfig.clone(),
             //mpsc tx
+            queue_tx: queue.clone()
             //logger tx
         }
     }
@@ -62,7 +63,8 @@ impl middleware::Handler for WebhookHandler {
     fn handle(&self, request: &mut Request) -> IronResult<Response> {
 
         //Get a thread local and thread safe (by Mutex) copy of the config
-        let config = self.config.clone();
+        let config   = self.config.clone();
+        let queue_tx = self.queue_tx.clone();
 
         //Verify webhook HMAC
         match validate_webhook(&config, request) {
@@ -70,7 +72,210 @@ impl middleware::Handler for WebhookHandler {
             Err(response) => return response
         }
 
-        Ok(Response::with((status::Ok, "Received.")))
+        //Get X-GitHub-Event header value
+        let mut github_event_string: String;
+        match extract_header_string(&request.headers, "X-GitHub-Event") {
+            Ok(signature) => github_event_string = signature,
+            Err(err)      => return Ok(Response::with((status::InternalServerError, err)))
+        }
+
+        //Get body
+        let mut body_vec:    Vec<u8> = Vec::new();
+        let mut body_string: String  = String::new();
+        request.body.read_to_end(&mut body_vec).unwrap();
+        match String::from_utf8(body_vec.clone()){
+            Ok(_body_string) => body_string = _body_string,
+            Err(err)         => return Ok(Response::with((status::InternalServerError, format!("Failed to stringify the request body: {}.", err))))
+        }
+
+        //Parse the body
+        let body_value: serde_json::Value;
+        match serde_json::from_str(&body_string[..]) {
+            Ok(_body_value) => body_value = _body_value,
+            Err(err)        => return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body: {}.", err))))
+        }
+
+        let webhook_event_type = WebhookEventType::from_string(&github_event_string[..]);
+        let webhook_event: WebhookEvent;
+        match webhook_event_type {
+            WebhookEventType::Ping               => {
+                return Ok(Response::with((status::Ok, "Pong.")))
+            }
+            WebhookEventType::IssueComment       => {
+                match WebhookEvent::from_issue_json(&config, &body_value.as_object().unwrap()) {
+                    Ok(webhook_event_option) => {
+                        match webhook_event_option {
+                            Some(webhook_event) => {
+                                queue_tx.lock().unwrap().send(webhook_event).unwrap();
+                            }
+                            None                => return Ok(Response::with((status::Ok, "Skipped.")))
+                        }
+                    }
+                    Err(err)                 => return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body data: {}.", err))))
+                }
+            }
+            WebhookEventType::PullRequestComment => {
+                match WebhookEvent::from_pull_request_json(&config, &body_value.as_object().unwrap()) {
+                    Ok(webhook_event_option) => {
+                        match webhook_event_option {
+                            Some(webhook_event) => {queue_tx.lock().unwrap().send(webhook_event).unwrap();}
+                            None                => return Ok(Response::with((status::Ok, "Skipped.")))
+                        }
+                    }
+                    Err(err)                 => return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body data: {}.", err))))
+                }
+            }
+            WebhookEventType::Invalid            => {
+                return Ok(Response::with((status::BadRequest, "Invalid event.")))
+            }
+        }
+        return Ok(Response::with((status::Ok, "Received.")))
+    }
+}
+
+
+////////////////////////////////////////////////////////////
+//                   WebhookEventType                     //
+////////////////////////////////////////////////////////////
+
+
+pub enum WebhookEventType {
+    Ping,
+    IssueComment,
+    PullRequestComment,
+    Invalid
+}
+
+impl WebhookEventType {
+    pub fn from_string(event_string: &str) -> WebhookEventType {
+        match event_string {
+            "ping"                        => WebhookEventType::Ping,
+            "issue_comment"               => WebhookEventType::IssueComment,
+            "pull_request_review_comment" => WebhookEventType::PullRequestComment,
+            _                             => WebhookEventType::Invalid
+        }
+    }
+}
+
+
+////////////////////////////////////////////////////////////
+//                     WebhookEvent                       //
+////////////////////////////////////////////////////////////
+
+/// WebhookEvent
+/// event_type: Type of the event (issue_comment, ping, ...)
+/// number:     Issue or PR number
+/// id:         Github ID for Issue or PR
+/// user:       User that triggered the event
+/// command:    Command made by user
+pub struct WebhookEvent {
+    pub event_type: WebhookEventType,
+    pub number:     u64,
+    pub id:         u64,
+    pub user:       String,
+    pub command:    String
+}
+
+impl WebhookEvent {
+
+    pub fn new() -> WebhookEvent {
+        WebhookEvent{
+            event_type: WebhookEventType::Invalid,
+            number:     0,
+            id:         0,
+            user:       String::new(),
+            command:    String::new()
+        }
+    }
+
+    ///Ok:  Option:
+    ///        Some: WebhookEvent
+    ///        None: Ignore, issue was edited or deleted,
+    ///              we only care about created or the
+    ///              comment is mentioning someone other
+    ///              than the bot (@{github_bot_name})
+    ///Err: An error occurred
+    pub fn from_issue_json(tsconfig: &Arc<Mutex<config::ConfigHandler>>, json_object: &BTreeMap<String, serde_json::Value>) -> Result<Option<WebhookEvent>, String> {
+
+        let mut config   = tsconfig.lock().unwrap();
+        let mut event    = WebhookEvent::new();
+        event.event_type = WebhookEventType::IssueComment;
+
+        //Get and validate "action" string
+        let action_string = try!(extract_json_string(&json_object, "action"));
+
+        if action_string != "created" {
+            return Ok(Option::None)
+        }
+
+        //Get "comment" Object
+        let comment_object = try!(extract_json_object_named(&json_object, "comment"));
+
+        //Check if the bot was mentioned, i.e if the message is directed towards the bot
+        let github_bot_name     = try!(config.get_string("config", "github_bot_name"));
+        let comment_body_string = try!(extract_json_string(&comment_object, "body"));
+        let regex               = Regex::new(&format!("@{}", github_bot_name)[..]).unwrap();
+        if regex.find(&comment_body_string[..]).is_some() {
+            event.command = String::from(regex.replace(&comment_body_string[..], "").trim());
+        } else {
+            return Ok(Option::None)
+        }
+
+        //Get "user" string
+        let user_object = try!(extract_json_object_named(&comment_object, "comment"));
+        event.user      = try!(extract_json_string(&user_object, "login"));
+
+        //Get "number" and "id" numbers
+        let issue_object = try!(extract_json_object_named(&json_object, "issue"));
+        event.number     = try!(extract_json_u64(&issue_object, "number"));
+        event.id         = try!(extract_json_u64(&issue_object, "id"));
+
+        Ok(Option::Some(event))
+    }
+
+    ///Ok:  Option:
+    ///        Some: WebhookEvent
+    ///        None: Ignore, issue was edited or deleted,
+    ///              we only care about created or the
+    ///              comment is mentioning someone other
+    ///              than the bot (@{github_bot_name})
+    ///Err: An error occurred
+    pub fn from_pull_request_json(tsconfig: &Arc<Mutex<config::ConfigHandler>>, json_object: &BTreeMap<String, serde_json::Value>) -> Result<Option<WebhookEvent>, String> {
+
+        let mut config   = tsconfig.lock().unwrap();
+        let mut event    = WebhookEvent::new();
+        event.event_type = WebhookEventType::PullRequestComment;
+
+        //Get and validate "action" string
+        let action_string = try!(extract_json_string(&json_object, "action"));
+
+        if action_string != "created" {
+            return Ok(Option::None)
+        }
+
+        //Get "comment" Object
+        let comment_object = try!(extract_json_object_named(&json_object, "comment"));
+
+        //Check if the bot was mentioned, i.e if the message is directed towards the bot
+        let     github_bot_name     = try!(config.get_string("config", "github_bot_name"));
+        let mut comment_body_string = try!(extract_json_string(&comment_object, "body"));
+        let     regex               = Regex::new(&format!("@{}", github_bot_name)[..]).unwrap();
+        if regex.find(&comment_body_string[..]).is_some() {
+            event.command = String::from(regex.replace(&comment_body_string[..], "").trim());
+        } else {
+            return Ok(Option::None)
+        }
+
+        //Get "user" string
+        let user_object = try!(extract_json_object_named(&comment_object, "comment"));
+        event.user      = try!(extract_json_string(&user_object, "login"));
+
+        //Get "number" and "id" numbers
+        let pull_request_object = try!(extract_json_object_named(&json_object, "pull_request"));
+        event.number            = try!(extract_json_u64(&pull_request_object, "number"));
+        event.id                = try!(extract_json_u64(&pull_request_object, "id"));
+
+        Ok(Option::Some(event))
     }
 }
 
@@ -129,16 +334,10 @@ pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, request: &
     }
 
     //Extract signature
-    let signature_string_header: String;
-    match request.headers.get_raw("X-Hub-Signature") {
-        Some(signature) => {
-            match String::from_utf8(signature[0].clone()) {
-                Ok(_signature_string_header) => signature_string_header = _signature_string_header,
-                Err(_)                => return Err(Ok(Response::with((status::InternalServerError, "Failed to stringify X-Hub-Signature."))))
-            }
-        }
-        //TODO?: Log this error?
-        None            => return Err(Ok(Response::with((status::BadRequest, "X-Hub-Signature missing."))))
+    let mut signature_string_header: String;
+    match extract_header_string(&request.headers, "X-Hub-Signature") {
+        Ok(signature) => signature_string_header = signature,
+        Err(err)      => return Err(Ok(Response::with((status::InternalServerError, err))))
     }
 
     //Extract body
@@ -159,6 +358,41 @@ pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, request: &
     Ok(signature_string_header == signature_string_actual)
 }
 
+pub fn extract_header_string(header: &iron::Headers, field: &str) -> Result<String, String> {
+    match header.get_raw(field) {
+        Some(value) => {
+            match String::from_utf8(value[0].clone()) {
+                Ok(value_string) => return Ok(value_string),
+                Err(err)         => return Err(format!("Failed to stringify the \"{}\" field in the header: {}.", field, err))
+            }
+        }
+        None        => return Err(format!("\"{}\" field in the header is missng.", field))
+    }
+}
+
+pub fn extract_json_object(value: &serde_json::Value) -> Result<BTreeMap<String, serde_json::Value>, String> {
+    match value.as_object().ok_or(String::from("JSON data does not describe an object")) {
+        Ok(object) => return Ok(object.clone()),
+        Err(err)   => return Err(err)
+    }
+}
+
+pub fn extract_json_object_named(object: &BTreeMap<String, serde_json::Value>, field: &'static str) -> Result<BTreeMap<String, serde_json::Value>, String> {
+    let value = try!(object.get(field).ok_or(format!("The \"{}\" field was not found in the JSON object.", field)));
+    return extract_json_object(&value);
+}
+
+pub fn extract_json_string(object: &BTreeMap<String, serde_json::Value>, field: &'static str) -> Result<String, String> {
+    let value     = try!(object.get(field).ok_or(format!("The \"{}\" field was not found in the JSON object.", field)));
+    let value_str = try!(value.as_string().ok_or(format!("The \"{}\" field does not describe a string.", field)));
+    return Ok(String::from(value_str));
+}
+
+pub fn extract_json_u64(object: &BTreeMap<String, serde_json::Value>, field: &'static str) -> Result<u64, String> {
+    let value     = try!(object.get(field).ok_or(format!("The \"{}\" field was not found in the JSON object.", field)));
+    let value_u64 = try!(value.as_u64().ok_or(format!("The \"{}\" field does not describe a string.", field)));
+    return Ok(value_u64);
+}
 
 //Main funcs
 
@@ -265,13 +499,70 @@ pub fn register(config: &mut config::ConfigHandler) {
 
 pub fn listen(config: &mut config::ConfigHandler) {
 
-    //Start server thread
-    let handler = WebhookHandler::new(Arc::new(Mutex::new(config.clone())));
-    Iron::new(handler).http("0.0.0.0:3000").unwrap();
+    //Event mpsc queue
+    let (tx, rx) = channel::<WebhookEvent>();
+    let tsconfig = Arc::new(Mutex::new(config.clone()));
+    let tsqueue  = Arc::new(Mutex::new(tx.clone()));
+    let handler  = WebhookHandler::new(tsconfig.clone(), tsqueue.clone());
 
-    //delete config, no longer needed
+    //Get local_ip_address
+    let mut local_ip_address: String;
+    match config.get_string("config", "local_ip_address") {
+        Ok(_local_ip_address) => local_ip_address = _local_ip_address,
+        Err(err)              => {panic!("Error getting  the \"local_ip_address\" value from config: {}.", err);}
+    }
+
+    let mut local_ip_address_num_vec: Vec<u8> = Vec::new();
+    for byte in local_ip_address.split(".") {
+        let byte_parsed: u8;
+        match byte.parse() {
+            Ok(_byte_parsed) => byte_parsed = _byte_parsed,
+            Err(err)         => {panic!("Error parsing the ip address byte into a u8: {}.", err)}
+        }
+        local_ip_address_num_vec.push(byte_parsed);
+    }
+
+
+    //Get listen_port
+    let mut listen_port_string: String;
+    let mut listen_port_u16   : u16;
+    match config.get_string("config", "listen_port") {
+        Ok(_listen_port) => listen_port_string = _listen_port,
+        Err(err)         => {panic!("Error getting  the \"listen_port\" value from config: {}.", err);}
+    }
+
+    match listen_port_string.parse() {
+        Ok(_listen_port_u16) => listen_port_u16 = _listen_port_u16,
+        Err(err)             => {panic!("Error parsing the port into a u16: {}.", err)}
+    }
+
+    //Start server thread
+    let server_thread = thread::spawn(move || {
+        Iron::new(handler).http(
+            SocketAddr::V4(
+                SocketAddrV4::new(
+                    Ipv4Addr::new(
+                        local_ip_address_num_vec[0],
+                        local_ip_address_num_vec[1],
+                        local_ip_address_num_vec[2],
+                        local_ip_address_num_vec[3]),
+                    listen_port_u16
+                )
+            )
+        ).unwrap();
+    });
+
+    //Drop the config, we will from now use the thread safe wrapped config.
+    drop(config);
 
     //Process events
+    loop {
+
+        //Dequeue
+        webhook_event = rx.recv().unwrap();
+        //TODO: process commands
+
+    }
 
 }
 

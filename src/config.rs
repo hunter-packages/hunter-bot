@@ -124,7 +124,7 @@ impl ConfigHandler {
     }
 
     //Gets a config value for a key, returns "" if key doesnt exist and creates the key
-    pub fn get_string(&mut self, section: &str, key: &str) -> Result<String, &'static str> {
+    pub fn get_string(&mut self, section: &str, key: &str) -> Result<String, String> {
 
         //Does the section exist? If not create it and insert empty string for given key.
         if self.toml_data.contains_key(&section.to_string()) {
@@ -136,7 +136,7 @@ impl ConfigHandler {
             if section_data.contains_key(&key.to_string()) {
 
                 //Is it a string? If not return err.
-                match section_data.get(&key.to_string()).unwrap().clone().as_str().ok_or("The requested value is not a string.") {
+                match section_data.get(&key.to_string()).unwrap().clone().as_str().ok_or(format!("The \"{}\" field in \"[{}]\" of the config does not represent a string.", key, section)) {
                     Ok(key_value) => return Ok(key_value.to_string()),
                     Err(err)      => return Err(err)
                 }
@@ -154,7 +154,7 @@ impl ConfigHandler {
     }
 
     //Gets a config value array for a key, returns an empty toml::Array if key doesnt exist and creates the key
-    pub fn get_array(&mut self, section: &str, key: &str) -> Result<Vec<toml::Value>, &'static str> {
+    pub fn get_array(&mut self, section: &str, key: &str) -> Result<Vec<toml::Value>, String> {
 
         //Does the section exist? If not create it and insert empty string for given key.
         if self.toml_data.contains_key(&section.to_string()) {
@@ -167,7 +167,7 @@ impl ConfigHandler {
 
                 //Is it an array? If not return err.
                 let mut array: Vec<toml::Value> = Vec::new();
-                match section_data.get(&key.to_string()).unwrap().clone().as_slice().ok_or("The requested value is not an array.") {
+                match section_data.get(&key.to_string()).unwrap().clone().as_slice().ok_or(format!("The \"{}\" field in \"[{}]\" of the config does not represent an array.", key, section)) {
                     Ok(key_value) => {
                         array.extend_from_slice(key_value);
                         return Ok(array)
