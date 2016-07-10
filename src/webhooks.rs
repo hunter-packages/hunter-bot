@@ -138,7 +138,7 @@ impl middleware::Handler for WebhookHandler {
 //                   WebhookEventType                     //
 ////////////////////////////////////////////////////////////
 
-
+#[derive(Debug)]
 pub enum WebhookEventType {
     Ping,
     IssueComment,
@@ -168,6 +168,7 @@ impl WebhookEventType {
 /// id:         Github ID for Issue or PR
 /// user:       User that triggered the event
 /// command:    Command made by user
+#[derive(Debug)]
 pub struct WebhookEvent {
     pub event_type: WebhookEventType,
     pub number:     u64,
