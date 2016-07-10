@@ -559,7 +559,7 @@ pub fn listen(config: &mut config::ConfigHandler) {
     loop {
 
         //Dequeue
-        webhook_event = rx.recv().unwrap();
+        let webhook_event = rx.recv().unwrap();
         //TODO: process commands
 
     }
