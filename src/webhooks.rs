@@ -69,14 +69,20 @@ impl middleware::Handler for WebhookHandler {
         //Verify webhook HMAC
         match validate_webhook(&config, request) {
             Ok(is_valid)  => {if !is_valid {return Ok(Response::with((status::BadRequest, "Invalid verification hash.")))}}
-            Err(response) => return response
+            Err(response) => {
+                println!("Invalid HMAC.");
+                return response
+            }
         }
 
         //Get X-GitHub-Event header value
         let mut github_event_string: String;
         match extract_header_string(&request.headers, "X-GitHub-Event") {
             Ok(signature) => github_event_string = signature,
-            Err(err)      => return Ok(Response::with((status::InternalServerError, err)))
+            Err(err)      => {
+                println!("{}", err);
+                return Ok(Response::with((status::InternalServerError, err)))
+            }
         }
 
         //Get body
@@ -85,14 +91,20 @@ impl middleware::Handler for WebhookHandler {
         request.body.read_to_end(&mut body_vec).unwrap();
         match String::from_utf8(body_vec.clone()){
             Ok(_body_string) => body_string = _body_string,
-            Err(err)         => return Ok(Response::with((status::InternalServerError, format!("Failed to stringify the request body: {}.", err))))
+            Err(err)         => {
+                println!("{}", format!("Failed to stringify the request body: {}.", err));
+                return Ok(Response::with((status::InternalServerError, format!("Failed to stringify the request body: {}.", err))))
+            }
         }
 
         //Parse the body
         let body_value: serde_json::Value;
         match serde_json::from_str(&body_string[..]) {
             Ok(_body_value) => body_value = _body_value,
-            Err(err)        => return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body: {}.", err))))
+            Err(err)        => {
+                println!("{}", format!("Failed to parse the request body: {}.", err));
+                return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body: {}.", err))))
+            }
         }
 
         let webhook_event_type = WebhookEventType::from_string(&github_event_string[..]);
@@ -111,7 +123,10 @@ impl middleware::Handler for WebhookHandler {
                             None                => return Ok(Response::with((status::Ok, "Skipped.")))
                         }
                     }
-                    Err(err)                 => return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body data: {}.", err))))
+                    Err(err)                 => {
+                        println!("{}", format!("Failed to parse the request body data: {}.", err));
+                        return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body data: {}.", err))))
+                    }
                 }
             }
             WebhookEventType::PullRequestComment => {
@@ -122,7 +137,10 @@ impl middleware::Handler for WebhookHandler {
                             None                => return Ok(Response::with((status::Ok, "Skipped.")))
                         }
                     }
-                    Err(err)                 => return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body data: {}.", err))))
+                    Err(err)                 => {
+                        println!("{}", format!("Failed to parse the request body data: {}.", err));
+                        return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body data: {}.", err))))
+                    }
                 }
             }
             WebhookEventType::Invalid            => {
