@@ -66,8 +66,19 @@ impl middleware::Handler for WebhookHandler {
         let config   = self.config.clone();
         let queue_tx = self.queue_tx.clone();
 
+        //Get body
+        let mut body_string: String  = String::new();
+        request.body.read_to_string(&mut body_string).unwrap();
+
+        //Get signature
+        let mut signature_string_header: String;
+        match extract_header_string(&request.headers, "X-Hub-Signature") {
+            Ok(signature) => signature_string_header = signature,
+            Err(err)      => return Ok(Response::with((status::InternalServerError, err)))
+        }
+
         //Verify webhook HMAC
-        match validate_webhook(&config, request) {
+        match validate_webhook(&config, &signature_string_header, &body_string) {
             Ok(is_valid)  => {if !is_valid {return Ok(Response::with((status::BadRequest, "Invalid verification hash.")))}}
             Err(response) => {
                 println!("Invalid HMAC.");
@@ -82,18 +93,6 @@ impl middleware::Handler for WebhookHandler {
             Err(err)      => {
                 println!("{}", err);
                 return Ok(Response::with((status::InternalServerError, err)))
-            }
-        }
-
-        //Get body
-        let mut body_vec:    Vec<u8> = Vec::new();
-        let mut body_string: String  = String::new();
-        request.body.read_to_end(&mut body_vec).unwrap();
-        match String::from_utf8(body_vec.clone()){
-            Ok(_body_string) => body_string = _body_string,
-            Err(err)         => {
-                println!("{}", format!("Failed to stringify the request body: {}.", err));
-                return Ok(Response::with((status::InternalServerError, format!("Failed to stringify the request body: {}.", err))))
             }
         }
 
@@ -343,7 +342,7 @@ pub fn github_post_request(endpoint: String, body: String) -> Result<(), &'stati
     }
 }
 
-pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, request: &mut Request) -> Result<bool, IronResult<Response>> {
+pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, header_string: &String, body_string: &String) -> Result<bool, IronResult<Response>> {
 
     //Get secret
     let github_webhook_secret: String;
@@ -353,20 +352,11 @@ pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, request: &
     }
 
     //Extract signature
-    let mut signature_string_header: String;
-    match extract_header_string(&request.headers, "X-Hub-Signature") {
-        Ok(signature) => signature_string_header = signature,
-        Err(err)      => return Err(Ok(Response::with((status::InternalServerError, err))))
-    }
-
-    //Extract body
-    let mut body_vec:    Vec<u8> = Vec::new();
-    let     body_string: String;
-    request.body.read_to_end(&mut body_vec).unwrap();
-    match String::from_utf8(body_vec.clone()){
-        Ok(_body_string) => body_string = _body_string,
-        Err(_)           => return Err(Ok(Response::with((status::InternalServerError, "Failed to stringify the request body."))))
-    }
+    //let mut signature_string_header: String;
+    //match extract_header_string(&request.headers, "X-Hub-Signature") {
+    //    Ok(signature) => signature_string_header = signature,
+    //    Err(err)      => return Err(Ok(Response::with((status::InternalServerError, err))))
+    //}
 
     //Compute hmac
     let hmac_array                = hmac(Type::SHA1, github_webhook_secret.as_bytes(), body_string.as_bytes());
@@ -374,7 +364,7 @@ pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, request: &
     let hmac_string               = hmac_strings.join("").to_lowercase();
     let signature_string_actual   = format!("sha1={}", hmac_string);
 
-    Ok(signature_string_header == signature_string_actual)
+    Ok(header_string.clone() == signature_string_actual)
 }
 
 pub fn extract_header_string(header: &iron::Headers, field: &str) -> Result<String, String> {
