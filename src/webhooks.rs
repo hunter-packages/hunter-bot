@@ -240,7 +240,7 @@ impl WebhookEvent {
         }
 
         //Get "user" string
-        let user_object = try!(extract_json_object_named(&comment_object, "comment"));
+        let user_object = try!(extract_json_object_named(&comment_object, "user"));
         event.user      = try!(extract_json_string(&user_object, "login"));
 
         //Get "number" and "id" numbers
