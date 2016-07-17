@@ -1,34 +1,204 @@
 //Copyright (c) 2016, Ruslan Baratov, Alex Frappier Lachapelle
 //All rights reserved.
 
+use std::error::Error;
+use std::fs;
+use std::fs::OpenOptions;
+use std::path::{Path, PathBuf};
 use std::process::exit;
+use std::str::FromStr;
+
+extern crate clap;
+use clap::{Arg, App};
+
+#[macro_use]
+extern crate log;
+use log::LogLevelFilter;
 
 extern crate hyper;
 
 mod config;
+mod logger;
 mod webhooks;
 
-//TODO: Output to log.
+//TODO: Validate config values
+//TODO: validate user (whitelist)
+
+////////////////////////////////////////////////////////////
+//                          Funcs                         //
+////////////////////////////////////////////////////////////
+
+//Utils
+//NOTE: No logging here, these functions fire before logger is initialized
+fn file_path_validator(file_path: String) -> Result<(), String> {
+    match OpenOptions::new().read(true).write(true).create(true).open(Path::new(&file_path)) {
+        Ok(_)    => Ok(()),
+        Err(err) => {
+            let mut err_string = "Cannot open file \"".to_string();
+            err_string.push_str(file_path.as_str());
+            err_string.push_str("\" due to an error: \"");
+            err_string.push_str(err.description());
+            err_string.push_str("\"");
+            Err(err_string)
+        }
+    }
+}
+
+fn dir_path_validator(dir_path: String) -> Result<(), String> {
+
+    //Check if it's even a directory.
+    match fs::metadata(&dir_path) {
+        Ok(metadata) => {
+            if !metadata.is_dir() {
+                let mut err_string = "\"".to_string();
+                err_string.push_str(dir_path.as_str());
+                err_string.push_str("\" is not a directory.");
+                return Err(err_string);
+            }
+        },
+        Err(err)     => {
+            let mut err_string = "Failed to acquire metadata for \"".to_string();
+            err_string.push_str(dir_path.as_str());
+            err_string.push_str("\": ");
+            err_string.push_str(err.description());
+            return Err(err_string);
+        }
+    }
+
+    //Test if we can write a file to this directory
+    let mut counter = 0;
+    loop {
+        //Generate a file name.
+        let mut tmp_file_path:     String = dir_path.clone();
+        let     tmp_file_name:     String = format!("ab{}ba.tmp", counter);
+        let     tmp_file_path_buf: PathBuf;
+        tmp_file_path.push_str(tmp_file_name.as_str());
+        tmp_file_path_buf = PathBuf::from(&tmp_file_path);
+
+        //If file does not exist, check if we can create it with r/w permissions.
+        if !tmp_file_path_buf.exists() {
+            match OpenOptions::new().read(true).write(true).create(true).open(&tmp_file_path_buf.as_path()) {
+                Ok(_)    => {
+                    match fs::remove_file(&tmp_file_path_buf) {
+                        Ok(_)    => return Ok(()),
+                        Err(err) => {
+                            let mut err_string = "Failed to delete temporary file: \"".to_string();
+                            err_string.push_str(&tmp_file_path);
+                            err_string.push_str("\": ");
+                            err_string.push_str(err.description());
+                            return Err(err_string);
+                        }
+                    }
+                }
+                Err(err) => {
+                    let mut err_string = "Invalid directory: \"".to_string();
+                    err_string.push_str(err.description());
+                    err_string.push_str("\"");
+                    return Err(err_string);
+                }
+            }
+        }
+        counter += 1;
+    }
+}
+
+fn max_log_level_validator(max_log_level: String) -> Result<(), String> {
+    match &max_log_level.to_lowercase()[..] {
+        "off"   => return Ok(()),
+        "error" => return Ok(()),
+        "warn"  => return Ok(()),
+        "info"  => return Ok(()),
+        "debug" => return Ok(()),
+        "trace" => return Ok(()),
+        _       => return Err(String::from("Invalid log level"))
+    }
+}
+
+fn log_size_validator(log_size: String) -> Result<(), String> {
+    match u64::from_str(&log_size[..]) {
+        Ok(_)    => return Ok(()),
+        Err(err) => return Err(format!("Failed to parse the log size: {}", err.description()))
+    }
+}
+
+
+////////////////////////////////////////////////////////////
+//                          Main                          //
+////////////////////////////////////////////////////////////
 
 fn main() {
 
-    let hunter_bot_config_path = "./HunterBotConfig.toml";
+    let     hunterbot_version      = "0.1.0";
+    //let mut hunter_bot_config_path = "./HunterBotConfig.toml";
 
-    //TODO:
+    let matches = App::new("HunterBot")
+    .version(hunterbot_version)
+    .arg(Arg::with_name("CONFIG")
+        .short("c")
+        .long("config")
+        .help("Sets a custom file path for the config.")
+        .validator(file_path_validator)
+        .takes_value(true))
+    .arg(Arg::with_name("LOG")
+        .short("l")
+        .long("log-dir")
+        .help("Sets a custom directory path for the log.")
+        .validator(dir_path_validator)
+        .takes_value(true))
+    .arg(Arg::with_name("MAXLOGLEVEL")
+        .short("m")
+        .long("max-log-level")
+        .help("Sets the maximum logging level, \"Info\" is the default, valid values are (in increasing order): off, error, warn, info, debug, trace.")
+        .validator(max_log_level_validator)
+        .takes_value(true))
+    .arg(Arg::with_name("LOGSIZE")
+        .short("s")
+        .long("log-size")
+        .help("Sets the maximum log file (in MB) before being rotated.")
+        .validator(log_size_validator)
+        .takes_value(true))
+    .get_matches();
+
+    let hunterbot_config_path = matches.value_of("CONFIG").unwrap_or("./HunterBotConfig.toml");
+    let hunterbot_log_dir     = matches.value_of("LOG").unwrap_or("./");
+    let log_size              = u64::from_str(matches.value_of("LOGSIZE").unwrap_or("5")).unwrap();
+    let max_log_level         = match matches.value_of("MAXLOGLEVEL").unwrap_or("info") {
+        "off"   => LogLevelFilter::Off,
+        "error" => LogLevelFilter::Error,
+        "warn"  => LogLevelFilter::Warn,
+        "info"  => LogLevelFilter::Info,
+        "debug" => LogLevelFilter::Debug,
+        "trace" => LogLevelFilter::Trace,
+        _       => LogLevelFilter::Off
+    };
+
+
     //Start logger
+    let (logger, rx) = logger::Logger::new(&max_log_level);
+    //TODO: check value for errors
+    logger::Logger::init(logger, max_log_level);
+    logger::Logger::process_logs(rx, PathBuf::from(hunterbot_log_dir), log_size);
+
+    info!("Logger booted.");
+    debug!("matches: {:?}", matches);
+    debug!("hunterbot_config_path: {}", hunterbot_config_path);
+    debug!("hunterbot_log_dir: {}", hunterbot_log_dir);
+    debug!("log_size: {}", log_size);
+    debug!("max_log_level: {}", max_log_level);
 
     //Load config
     let mut config = config::ConfigHandler::new();
-    println!("Opening config...");
+    info!("Opening config...");
 
-    match config.load(&hunter_bot_config_path.to_string()) {
-        Ok(())   => {println!("Success!");}
+    match config.load(&hunterbot_config_path.to_string()) {
+        Ok(())   => {info!("Success!");}
         Err(err) => {
-            println!("Error! {}", err);
-            println!("Exiting...");
+            error!("Error! {}", err);
+            error!("Exiting...");
             exit(-1);
         }
     }
+    debug!("config: {:?}", config);
 
     //Setup webhooks
     webhooks::register(&mut config);

@@ -4,10 +4,9 @@
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::Read;
-use std::mem;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Sender};
 use std::thread;
 
 extern crate hyper;
@@ -37,6 +36,8 @@ extern crate serde_json;
 
 use config;
 
+include!("logger_macros.rs");
+
 
 ////////////////////////////////////////////////////////////
 //                     WebhookHandler                     //
@@ -50,48 +51,59 @@ pub struct WebhookHandler {
 
 impl WebhookHandler {
     pub fn new(tsconfig: Arc<Mutex<config::ConfigHandler>>, queue: Arc<Mutex<Sender<WebhookEvent>>>) -> WebhookHandler {
+        trace!("webhooks.rs: WebhookHandler::new(tsconfig, queue)");
         WebhookHandler{
             config: tsconfig.clone(),
-            //mpsc tx
             queue_tx: queue.clone()
-            //logger tx
         }
     }
 }
 
+//TODO: Adapt to work with Appveyor and Travis-CI requests + do trace
 impl middleware::Handler for WebhookHandler {
     fn handle(&self, request: &mut Request) -> IronResult<Response> {
+
+        thread_trace!("webhook.rs: WebhookHandler::handle(&self, &mut Request)");
+        thread_debug!("Received a webhook");
+        thread_debug!("Url:     {:?}", request.url);
+        thread_debug!("Headers: {:?}", request.headers);
+
 
         //Get a thread local and thread safe (by Mutex) copy of the config
         let config   = self.config.clone();
         let queue_tx = self.queue_tx.clone();
 
         //Get body
+        thread_trace!("  Extract request body");
         let mut body_string: String  = String::new();
         request.body.read_to_string(&mut body_string).unwrap();
+        thread_debug!("Body:    {}", body_string);
 
         //Get signature
-        let mut signature_string_header: String;
+        thread_trace!("  Extract X-Hub-Signature header value");
+        let signature_string_header: String;
         match extract_header_string(&request.headers, "X-Hub-Signature") {
             Ok(signature) => signature_string_header = signature,
             Err(err)      => return Ok(Response::with((status::InternalServerError, err)))
         }
 
         //Verify webhook HMAC
+        //FIXME: this is kinda messy
+        //TODO:  tracing
         match validate_webhook(&config, &signature_string_header, &body_string) {
             Ok(is_valid)  => {if !is_valid {return Ok(Response::with((status::BadRequest, "Invalid verification hash.")))}}
             Err(response) => {
-                println!("Invalid HMAC.");
+                thread_warn!("Received a github webhook with an invalid HMAC.");
                 return response
             }
         }
 
         //Get X-GitHub-Event header value
-        let mut github_event_string: String;
+        let github_event_string: String;
         match extract_header_string(&request.headers, "X-GitHub-Event") {
             Ok(signature) => github_event_string = signature,
             Err(err)      => {
-                println!("{}", err);
+                error!("Failed to extract the \"X-GitHub-Event\" from a github webhook header: {}", err);
                 return Ok(Response::with((status::InternalServerError, err)))
             }
         }
@@ -101,7 +113,7 @@ impl middleware::Handler for WebhookHandler {
         match serde_json::from_str(&body_string[..]) {
             Ok(_body_value) => body_value = _body_value,
             Err(err)        => {
-                println!("{}", format!("Failed to parse the request body: {}.", err));
+                error!("{}", format!("Failed to parse the request body in a github webhook: {}.", err));
                 return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body: {}.", err))))
             }
         }
@@ -123,7 +135,7 @@ impl middleware::Handler for WebhookHandler {
                         }
                     }
                     Err(err)                 => {
-                        println!("{}", format!("Failed to parse the request body data: {}.", err));
+                        error!("{}", format!("Failed to parse the request body data in a github webhook: {}.", err));
                         return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body data: {}.", err))))
                     }
                 }
@@ -137,7 +149,7 @@ impl middleware::Handler for WebhookHandler {
                         }
                     }
                     Err(err)                 => {
-                        println!("{}", format!("Failed to parse the request body data: {}.", err));
+                        error!("{}", format!("Failed to parse the request body data in a github webhook: {}.", err));
                         return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body data: {}.", err))))
                     }
                 }
@@ -164,8 +176,9 @@ pub enum WebhookEventType {
 }
 
 impl WebhookEventType {
-    pub fn from_string(event_string: &str) -> WebhookEventType {
-        match event_string {
+    pub fn from_string(event_str: &str) -> WebhookEventType {
+        thread_trace!("webhooks.rs: WebhookEventType::from_string(\"{}\")", event_str);
+        match event_str {
             "ping"                        => WebhookEventType::Ping,
             "issue_comment"               => WebhookEventType::IssueComment,
             "pull_request_review_comment" => WebhookEventType::PullRequestComment,
@@ -197,6 +210,7 @@ pub struct WebhookEvent {
 impl WebhookEvent {
 
     pub fn new() -> WebhookEvent {
+        thread_trace!("webhook.rs: WebhookEvent::new()");
         WebhookEvent{
             event_type: WebhookEventType::Invalid,
             number:     0,
@@ -215,39 +229,59 @@ impl WebhookEvent {
     ///Err: An error occurred
     pub fn from_issue_json(tsconfig: &Arc<Mutex<config::ConfigHandler>>, json_object: &BTreeMap<String, serde_json::Value>) -> Result<Option<WebhookEvent>, String> {
 
+        thread_trace!("webhook.rs: WebhookEvent::from_issue_json(tsconfig, json_object)");
+
         let mut config   = tsconfig.lock().unwrap();
         let mut event    = WebhookEvent::new();
         event.event_type = WebhookEventType::IssueComment;
 
         //Get and validate "action" string
+        thread_trace!("  Get \"action\" string (try!)");
         let action_string = try!(extract_json_string(&json_object, "action"));
 
+        thread_trace!("  Is action create");
         if action_string != "created" {
+            thread_trace!("    false");
             return Ok(Option::None)
         }
+        thread_trace!("    true");
 
         //Get "comment" Object
+        thread_trace!("  Get \"comment\" object (try!)");
         let comment_object = try!(extract_json_object_named(&json_object, "comment"));
 
         //Check if the bot was mentioned, i.e if the message is directed towards the bot
+        thread_trace!("  Get \"github_bot_name\" config string (try!)");
         let github_bot_name     = try!(config.get_string("config", "github_bot_name"));
+        thread_trace!("  Get \"body\" string (try!)");
         let comment_body_string = try!(extract_json_string(&comment_object, "body"));
         let regex               = Regex::new(&format!("@{}", github_bot_name)[..]).unwrap();
+
+        thread_trace!("  Is bot mentioned test");
         if regex.find(&comment_body_string[..]).is_some() {
+            thread_trace!("    true");
             event.command = String::from(regex.replace(&comment_body_string[..], "").trim());
         } else {
+            thread_trace!("    false");
+            thread_trace!("Return Ok(None)");
             return Ok(Option::None)
         }
 
         //Get "user" string
+        thread_trace!("  Get \"user\" object (try!)");
         let user_object = try!(extract_json_object_named(&comment_object, "user"));
+        thread_trace!("  Get \"login\" string (try!)");
         event.user      = try!(extract_json_string(&user_object, "login"));
 
         //Get "number" and "id" numbers
+        thread_trace!("  Get \"issue\" object (try!)");
         let issue_object = try!(extract_json_object_named(&json_object, "issue"));
+        thread_trace!("  Get \"number\" u64 (try!)");
         event.number     = try!(extract_json_u64(&issue_object, "number"));
+        thread_trace!("  Get \"id\" u64 (try!)");
         event.id         = try!(extract_json_u64(&issue_object, "id"));
 
+        thread_trace!("Return Ok");
         Ok(Option::Some(event))
     }
 
@@ -260,39 +294,59 @@ impl WebhookEvent {
     ///Err: An error occurred
     pub fn from_pull_request_json(tsconfig: &Arc<Mutex<config::ConfigHandler>>, json_object: &BTreeMap<String, serde_json::Value>) -> Result<Option<WebhookEvent>, String> {
 
+        thread_trace!("webhook.rs: WebhookEvent::from_issue_json(tsconfig, json_object)");
+
         let mut config   = tsconfig.lock().unwrap();
         let mut event    = WebhookEvent::new();
         event.event_type = WebhookEventType::PullRequestComment;
 
         //Get and validate "action" string
+        thread_trace!("  Get \"action\" string (try!)");
         let action_string = try!(extract_json_string(&json_object, "action"));
 
+        thread_trace!("  Is action create");
         if action_string != "created" {
+            thread_trace!("    false");
             return Ok(Option::None)
         }
+        thread_trace!("    true");
 
         //Get "comment" Object
+        thread_trace!("  Get \"comment\" object (try!)");
         let comment_object = try!(extract_json_object_named(&json_object, "comment"));
 
         //Check if the bot was mentioned, i.e if the message is directed towards the bot
-        let     github_bot_name     = try!(config.get_string("config", "github_bot_name"));
-        let mut comment_body_string = try!(extract_json_string(&comment_object, "body"));
-        let     regex               = Regex::new(&format!("@{}", github_bot_name)[..]).unwrap();
+        thread_trace!("  Get \"github_bot_name\" config string (try!)");
+        let github_bot_name     = try!(config.get_string("config", "github_bot_name"));
+        thread_trace!("  Get \"body\" string (try!)");
+        let comment_body_string = try!(extract_json_string(&comment_object, "body"));
+        let regex               = Regex::new(&format!("@{}", github_bot_name)[..]).unwrap();
+
+        thread_trace!("  Is bot mentioned test");
         if regex.find(&comment_body_string[..]).is_some() {
+            thread_trace!("    true");
             event.command = String::from(regex.replace(&comment_body_string[..], "").trim());
         } else {
+            thread_trace!("    false");
+            thread_trace!("Return Ok(None)");
             return Ok(Option::None)
         }
 
         //Get "user" string
+        thread_trace!("  Get \"user\" object (try!)");
         let user_object = try!(extract_json_object_named(&comment_object, "comment"));
+        thread_trace!("  Get \"login\" string (try!)");
         event.user      = try!(extract_json_string(&user_object, "login"));
 
         //Get "number" and "id" numbers
+        thread_trace!("  Get \"issue\" object (try!)");
         let pull_request_object = try!(extract_json_object_named(&json_object, "pull_request"));
+        thread_trace!("  Get \"number\" u64 (try!)");
         event.number            = try!(extract_json_u64(&pull_request_object, "number"));
+        thread_trace!("  Get \"id\" u64 (try!)");
         event.id                = try!(extract_json_u64(&pull_request_object, "id"));
 
+        thread_trace!("Return Ok");
         Ok(Option::Some(event))
     }
 }
@@ -304,42 +358,57 @@ impl WebhookEvent {
 
 //Utils
 
-pub fn github_post_request(endpoint: String, body: String) -> Result<(), &'static str>{
+pub fn github_post_request(endpoint: String, body: String) -> Result<(), String>{
+
+    thread_trace!("webhooks.rs: github_post_request({}, {})", endpoint, body);
 
     let     http_client   = Client::new();
     let     api_call      = format!("https://api.github.com/{}", endpoint);
-    let     api_call_url:   Url;
+    let     body_len      = body.len().clone();
     let mut header        = Headers::new();
-    let mut response:       hyper::client::Response;
     let mut response_body = String::new();
 
-    match api_call.into_url() {
-        Ok(url) => api_call_url = url,
-        Err(_)  => return Err("Failed to parse the API call url.")
-    }
+    thread_trace!("  Api call to url");
+    let api_call_url = match api_call.into_url() {
+        Ok(url)   => {
+            thread_trace!("    Ok");
+            url
+        },
+        Err(err)  => {
+            thread_trace!("Return Err");
+            return Err(format!("Failed to parse the API call url: {}", err))
+        }
+    };
 
     header.set_raw("User-Agent", vec![b"hunter-bot".to_vec()]);
-    let body_len = body.len().clone();
-    match http_client.post(api_call_url)
+    thread_trace!("  Post request");
+    let mut response = match http_client.post(api_call_url)
         .headers(header)
         .body(Body::BufBody(&body.into_bytes()[..], body_len))
         .send() {
-        Ok(res) => response = res,
-        Err(_)  => return Err("Failed to  call the API.")
-    }
+        Ok(res)   => {
+            thread_trace!("    Ok");
+            res
+        },
+        Err(err)  => return Err(format!("Failed to  call the API: {}", err))
+    };
 
+    thread_trace!("  Status bad credentials check");
     if response.status == hyper::status::StatusCode::Unauthorized {
-        return Err("Bad Credentials")
+        thread_trace!("Return err");
+        return Err(String::from("Bad Credentials"))
     }
+    thread_trace!("    Ok");
 
+    thread_trace!("  Status not found check");
     if response.status == hyper::status::StatusCode::NotFound {
-        return Err("Endpoint not found or insufficient privileges.")
+        thread_trace!("Return Err");
+        return Err(String::from("Endpoint not found or insufficient privileges."))
     }
+    thread_trace!("    Ok");
 
-    match response.read_to_string(&mut response_body){
-        Ok(_)  => Ok(()),
-        Err(_) => Err("Failed to  convert the API response to a string.")
-    }
+    thread_trace!("Return Ok");
+    Ok(())
 }
 
 pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, header_string: &String, body_string: &String) -> Result<bool, IronResult<Response>> {
@@ -407,10 +476,13 @@ pub fn extract_json_u64(object: &BTreeMap<String, serde_json::Value>, field: &'s
 
 pub fn register(config: &mut config::ConfigHandler) {
 
+    trace!("webhooks.rs: register()");
+
     //List of events to listent for.
     let hooks = vec!["issue_comment","pull_request_review_comment"];
+    debug!("hooks: {:?}", hooks);
 
-    println!("Setting up webhooks...");
+    info!("Setting up webhooks...");
 
     //Create a random number for the "secret"
     //which will be used for verifying that
@@ -515,7 +587,7 @@ pub fn listen(config: &mut config::ConfigHandler) {
     let handler  = WebhookHandler::new(tsconfig.clone(), tsqueue.clone());
 
     //Get local_ip_address
-    let mut local_ip_address: String;
+    let local_ip_address: String;
     match config.get_string("config", "local_ip_address") {
         Ok(_local_ip_address) => local_ip_address = _local_ip_address,
         Err(err)              => {panic!("Error getting  the \"local_ip_address\" value from config: {}.", err);}
@@ -533,8 +605,8 @@ pub fn listen(config: &mut config::ConfigHandler) {
 
 
     //Get listen_port
-    let mut listen_port_string: String;
-    let mut listen_port_u16   : u16;
+    let listen_port_string: String;
+    let listen_port_u16   : u16;
     match config.get_string("config", "listen_port") {
         Ok(_listen_port) => listen_port_string = _listen_port,
         Err(err)         => {panic!("Error getting  the \"listen_port\" value from config: {}.", err);}
