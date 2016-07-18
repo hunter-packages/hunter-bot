@@ -413,12 +413,20 @@ pub fn github_post_request(endpoint: String, body: String) -> Result<(), String>
 
 pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, header_string: &String, body_string: &String) -> Result<bool, IronResult<Response>> {
 
+    thread_trace!("webhooks.rs: validate_webhook(tsconfig, header_string, body_string)");
+
     //Get secret
-    let github_webhook_secret: String;
-    match tsconfig.lock().unwrap().get_string("state", "github_webhook_secret") {
-        Ok(_github_webhook_secret) => github_webhook_secret = _github_webhook_secret,
-        Err(_)                     => return Err(Ok(Response::with((status::InternalServerError, "Failed to get \"github_webhook_secret\" from config."))))
-    }
+    thread_trace!("  Get \"github_webhook_secret\" from config");
+    let github_webhook_secret: String = match tsconfig.lock().unwrap().get_string("state", "github_webhook_secret") {
+        Ok(secret) => {
+            thread_trace!("    Ok");
+            secret
+        },
+        Err(_)                     => {
+            thread_trace!("Return Err");
+            return Err(Ok(Response::with((status::InternalServerError, "Failed to get \"github_webhook_secret\" from config."))))
+        }
+    };
 
     //Extract signature
     //let mut signature_string_header: String;
@@ -428,47 +436,82 @@ pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, header_str
     //}
 
     //Compute hmac
+    thread_trace!("  Compute HMAC");
     let hmac_array                = hmac(Type::SHA1, github_webhook_secret.as_bytes(), body_string.as_bytes());
     let hmac_strings: Vec<String> = hmac_array.iter().map(|byte| format!("{:02X}", byte)).collect();
     let hmac_string               = hmac_strings.join("").to_lowercase();
     let signature_string_actual   = format!("sha1={}", hmac_string);
 
+    thread_trace!("  HMAC matches: {}", (header_string.clone() == signature_string_actual));
+    thread_trace!("Return Ok");
     Ok(header_string.clone() == signature_string_actual)
 }
 
 pub fn extract_header_string(header: &iron::Headers, field: &str) -> Result<String, String> {
+    thread_trace!("webhook.rs: extract_header_string(header, \"{}\")", field);
+    thread_trace!("  Get raw header data");
     match header.get_raw(field) {
         Some(value) => {
+            thread_trace!("    Ok");
+            thread_trace!("    Stringify header data");
             match String::from_utf8(value[0].clone()) {
-                Ok(value_string) => return Ok(value_string),
-                Err(err)         => return Err(format!("Failed to stringify the \"{}\" field in the header: {}.", field, err))
+                Ok(value_string) => {
+                    thread_trace!("return Ok");
+                    return Ok(value_string)
+                },
+                Err(err)         => {
+                    thread_trace!("      return Err");
+                    return Err(format!("Failed to stringify the \"{}\" field in the header: {}.", field, err))
+                }
             }
         }
-        None        => return Err(format!("\"{}\" field in the header is missng.", field))
+        None        => {
+            thread_trace!("return Err");
+            return Err(format!("\"{}\" field in the header is missng.", field))
+        }
     }
 }
 
 pub fn extract_json_object(value: &serde_json::Value) -> Result<BTreeMap<String, serde_json::Value>, String> {
+    thread_trace!("webhook.rs: extract_json_object(value)");
+    thread_trace!("  Value to object");
     match value.as_object().ok_or(String::from("JSON data does not describe an object")) {
-        Ok(object) => return Ok(object.clone()),
-        Err(err)   => return Err(err)
+        Ok(object) => {
+            thread_trace!("return Ok");
+            return Ok(object.clone())
+        },
+        Err(err)   => {
+            thread_trace!("return Err");
+            return Err(err)
+        }
     }
 }
 
 pub fn extract_json_object_named(object: &BTreeMap<String, serde_json::Value>, field: &'static str) -> Result<BTreeMap<String, serde_json::Value>, String> {
+    thread_trace!("webhooks.rs: extract_json_object_named(&object, \"{}\")", field);
+    thread_trace!("  Get field from object (try!)");
     let value = try!(object.get(field).ok_or(format!("The \"{}\" field was not found in the JSON object.", field)));
+    thread_trace!("Return extract_json_object(&value)");
     return extract_json_object(&value);
 }
 
 pub fn extract_json_string(object: &BTreeMap<String, serde_json::Value>, field: &'static str) -> Result<String, String> {
+    thread_trace!("webhooks.rs: extract_json_string(&object, \"{}\")", field);
+    thread_trace!("  Get field from object (try!)");
     let value     = try!(object.get(field).ok_or(format!("The \"{}\" field was not found in the JSON object.", field)));
+    thread_trace!("  Get field as string (try!)");
     let value_str = try!(value.as_string().ok_or(format!("The \"{}\" field does not describe a string.", field)));
+    thread_trace!("Return Ok");
     return Ok(String::from(value_str));
 }
 
 pub fn extract_json_u64(object: &BTreeMap<String, serde_json::Value>, field: &'static str) -> Result<u64, String> {
+    thread_trace!("webhooks.rs: extract_json_u64(&object, \"{}\")", field);
+    thread_trace!("  Get field from object (try!)");
     let value     = try!(object.get(field).ok_or(format!("The \"{}\" field was not found in the JSON object.", field)));
+    thread_trace!("  Get field as u64 (try!)");
     let value_u64 = try!(value.as_u64().ok_or(format!("The \"{}\" field does not describe a string.", field)));
+    thread_trace!("Return Ok");
     return Ok(value_u64);
 }
 
@@ -574,7 +617,7 @@ pub fn register(config: &mut config::ConfigHandler) {
         Err(err) => {panic!("Failed to register webhooks: {}", err)}
     }
 
-    println!("Success!")
+    info!("Success!");
 }
 
 
