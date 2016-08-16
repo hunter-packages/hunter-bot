@@ -34,6 +34,7 @@ use self::regex::Regex;
 extern crate serde;
 extern crate serde_json;
 
+use commands;
 use config;
 
 include!("logger_macros.rs");
@@ -46,14 +47,13 @@ include!("logger_macros.rs");
 pub struct WebhookHandler {
     config:   Arc<Mutex<config::ConfigHandler>>,
     queue_tx: Arc<Mutex<Sender<WebhookEvent>>>
-    //logger tx
 }
 
 impl WebhookHandler {
     pub fn new(tsconfig: Arc<Mutex<config::ConfigHandler>>, queue: Arc<Mutex<Sender<WebhookEvent>>>) -> WebhookHandler {
         trace!("webhooks.rs: WebhookHandler::new(tsconfig, queue)");
         WebhookHandler{
-            config: tsconfig.clone(),
+            config:   tsconfig.clone(),
             queue_tx: queue.clone()
         }
     }
@@ -167,7 +167,7 @@ impl middleware::Handler for WebhookHandler {
 //                   WebhookEventType                     //
 ////////////////////////////////////////////////////////////
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum WebhookEventType {
     Ping,
     IssueComment,
@@ -198,7 +198,7 @@ impl WebhookEventType {
 /// id:         Github ID for Issue or PR
 /// user:       User that triggered the event
 /// command:    Command made by user
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct WebhookEvent {
     pub event_type: WebhookEventType,
     pub number:     u64,
@@ -294,7 +294,7 @@ impl WebhookEvent {
     ///Err: An error occurred
     pub fn from_pull_request_json(tsconfig: &Arc<Mutex<config::ConfigHandler>>, json_object: &BTreeMap<String, serde_json::Value>) -> Result<Option<WebhookEvent>, String> {
 
-        thread_trace!("webhook.rs: WebhookEvent::from_issue_json(tsconfig, json_object)");
+        thread_trace!("webhook.rs: WebhookEvent::from_pull_request_json(tsconfig, json_object)");
 
         let mut config   = tsconfig.lock().unwrap();
         let mut event    = WebhookEvent::new();
@@ -541,7 +541,7 @@ pub fn register(config: &mut config::ConfigHandler) {
     }
 
     if github_webhook_secret == String::new() {
-        // Get the RNG
+        // Get the system RNG
         let mut rng = match rand::os::OsRng::new() {
             Ok(_rng) => _rng,
             Err(err) => panic!("Failed to obtain OS RNG: {}", err)
@@ -577,13 +577,13 @@ pub fn register(config: &mut config::ConfigHandler) {
     let mut public_ip_address: String;
     match config.get_string("config", "public_ip_address") {
         Ok(_public_ip_address) => public_ip_address = _public_ip_address,
-        Err(err)          => {panic!("Error getting  the \"public_ip_address\" value from config: {}", err);}
+        Err(err)               => {panic!("Error getting  the \"public_ip_address\" value from config: {}", err);}
     }
 
     let listen_port: String;
     match config.get_string("config", "listen_port") {
         Ok(_listen_port) => listen_port = _listen_port,
-        Err(err)          => {panic!("Error getting  the \"listen_port\" value from config: {}", err);}
+        Err(err)         => {panic!("Error getting  the \"listen_port\" value from config: {}", err);}
     }
 
     public_ip_address.push_str(":");
@@ -680,14 +680,14 @@ pub fn listen(config: &mut config::ConfigHandler) {
     drop(config);
 
     //Process events
+    let mut command_handler = commands::CommandHandler::new(&tsconfig);
     loop {
 
         //Dequeue
         let webhook_event = rx.recv().unwrap();
-        //TODO: process commands
+        command_handler.parse_command(webhook_event);
 
     }
-
 }
 
 

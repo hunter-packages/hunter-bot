@@ -17,6 +17,7 @@ use log::LogLevelFilter;
 
 extern crate hyper;
 
+mod commands;
 mod config;
 mod logger;
 mod webhooks;
@@ -33,14 +34,7 @@ mod webhooks;
 fn file_path_validator(file_path: String) -> Result<(), String> {
     match OpenOptions::new().read(true).write(true).create(true).open(Path::new(&file_path)) {
         Ok(_)    => Ok(()),
-        Err(err) => {
-            let mut err_string = "Cannot open file \"".to_string();
-            err_string.push_str(file_path.as_str());
-            err_string.push_str("\" due to an error: \"");
-            err_string.push_str(err.description());
-            err_string.push_str("\"");
-            Err(err_string)
-        }
+        Err(err) => {Err(format!("Cannot open file \"{}\" due to an error: \"{}\"", file_path.as_str(), err.description()))}
     }
 }
 
@@ -102,6 +96,7 @@ fn dir_path_validator(dir_path: String) -> Result<(), String> {
     }
 }
 
+
 fn max_log_level_validator(max_log_level: String) -> Result<(), String> {
     match &max_log_level.to_lowercase()[..] {
         "off"   => return Ok(()),
@@ -128,10 +123,8 @@ fn log_size_validator(log_size: String) -> Result<(), String> {
 
 fn main() {
 
-    let     hunterbot_version      = "0.1.0";
-    //let mut hunter_bot_config_path = "./HunterBotConfig.toml";
-
-    let matches = App::new("HunterBot")
+    let hunterbot_version = "0.1.0";
+    let matches           = App::new("HunterBot")
     .version(hunterbot_version)
     .arg(Arg::with_name("CONFIG")
         .short("c")
