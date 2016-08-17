@@ -3,9 +3,9 @@ Build documentation
 
 Documentation build by `sphinx`_ and hosted on `readthedocs`_ service.
 
-Good tutorials:
+.. seealso::
 
-* http://rest-sphinx-memo.readthedocs.io/en/latest/
+  * `Good tutorials <http://rest-sphinx-memo.readthedocs.io/en/latest/>`__
 
 Local
 =====
@@ -69,8 +69,8 @@ Do the same and stay in environment:
   /.../docs/_venv/bin/pip
 
 ``jenkins.sh`` will build documentation from scratch. This may be useful in
-case some HTML file stuck in build. To update documentation without deleting
-old files use ``make.sh`` script:
+case some HTML/CSS files stuck in temporary directory. To update documentation
+without deleting old files use ``make.sh`` script (which is usually much faster):
 
 .. code-block:: shell
 
