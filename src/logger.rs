@@ -135,7 +135,14 @@ pub fn get_next_logfile_path(log_dir: &PathBuf, variant: &str) -> String {
             Ok(_)    => (), //File exists, lets keep looking for another one.
             Err(err) => {
                 match err.kind() {
-                    ErrorKind::NotFound         => {return filename},
+                    ErrorKind::NotFound         => {
+                        match path.to_str() {
+                            Some(file) => return String::from(file),
+                            None       => {
+                                panic!("Failed to get file name from PathBuf (invalid UTF-8)");
+                            }
+                        }
+                    },
                     ErrorKind::PermissionDenied => {panic!("Cannot open {} to write logs into: Permission Denied.", path.display());}
                     _                           => {panic!("Failed to open log file: {}", err);}
                 }
