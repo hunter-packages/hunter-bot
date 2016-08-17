@@ -9,10 +9,13 @@ clap       = "*"
 hyper      = "*"
 iron       = "*"
 log        = "0.3"
-openssl    = "*"
 rand       = "*"
 regex      = "*"
 serde      = "*"
 serde_json = "*"
 thread-id  = "2.0.0"
 toml       = "*"
+
+[dependencies.openssl]
+version = "*"
+features = ["hmac"]

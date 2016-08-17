@@ -435,7 +435,13 @@ pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, header_str
 
     //Compute hmac
     thread_trace!("  Compute HMAC");
-    let hmac_array                = hmac(Type::SHA1, github_webhook_secret.as_bytes(), body_string.as_bytes());
+    let hmac_array                = match hmac(Type::SHA1, github_webhook_secret.as_bytes(), body_string.as_bytes()) {
+        Ok(hmac) => hmac,
+        Err(_)   => {
+            thread_trace!("Return Err");
+            return Err(Ok(Response::with((status::InternalServerError, "Failed to compute HMAC value."))));
+        }
+    };
     let hmac_strings: Vec<String> = hmac_array.iter().map(|byte| format!("{:02X}", byte)).collect();
     let hmac_string               = hmac_strings.join("").to_lowercase();
     let signature_string_actual   = format!("sha1={}", hmac_string);
@@ -498,7 +504,7 @@ pub fn extract_json_string(object: &BTreeMap<String, serde_json::Value>, field: 
     thread_trace!("  Get field from object (try!)");
     let value     = try!(object.get(field).ok_or(format!("The \"{}\" field was not found in the JSON object.", field)));
     thread_trace!("  Get field as string (try!)");
-    let value_str = try!(value.as_string().ok_or(format!("The \"{}\" field does not describe a string.", field)));
+    let value_str = try!(value.as_str().ok_or(format!("The \"{}\" field does not describe a string.", field)));
     thread_trace!("Return Ok");
     return Ok(String::from(value_str));
 }
