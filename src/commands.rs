@@ -150,7 +150,7 @@ pub fn respond(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks
         }
 
         //Get owner api token
-        match config.get_string("config", "github_owner_token") {
+        match config.get_string("config", "github_bot_token") {
             Ok(_github_owner_token) => github_owner_token = _github_owner_token,
             Err(err)                => {
                 thread_error!("Error getting  the \"github_owner_token\" value from config: {}", err);
@@ -160,7 +160,7 @@ pub fn respond(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks
     }
 
     let endpoint = format!("repos/{}/issues/{}/comments?access_token={}", github_follow_repo, raw_event.number, github_owner_token);
-    let message  = format!("{{body: \"@{} {}\"}}", raw_event.user, msg);
+    let message  = format!("{{\"body\": \"@{} {}\"}}", raw_event.user, msg);
     match webhooks::github_post_request(endpoint, message) {
         Ok(())   => (),
         Err(err) => {thread_error!("{}", err);}
