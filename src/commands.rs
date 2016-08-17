@@ -124,7 +124,7 @@ impl CommandHandler {
                 run_cmd = true;
             } else if !command.requires_please && is_please_provided {
                 run_cmd         = true;
-                response_prefix = String::from("You didn't need to say please but thanks anyways :smiley: Ohh and also: ");
+                response_prefix = String::from("You didn't need to say please but thanks anyways :smiley: \r\n\r\nOhh and: \r\n");
             } else if command.requires_please && !is_please_provided {
                 //TODO: keep please state
                 respond(&self.config, webhook.clone(), String::from("Whats the magic word?"));

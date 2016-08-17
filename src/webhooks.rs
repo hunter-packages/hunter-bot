@@ -358,6 +358,7 @@ impl WebhookEvent {
 
 //Utils
 
+//TODO: add bad request check
 pub fn github_post_request(endpoint: String, body: String) -> Result<(), String>{
 
     thread_trace!("webhooks.rs: github_post_request({}, {})", endpoint, body);
