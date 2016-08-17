@@ -1,3 +1,7 @@
 target
 Cargo.lock
 .idea/
+
+docs/_venv
+docs/_build
+docs/_spelling
