@@ -84,7 +84,7 @@ impl CommandHandler {
         //Find command among registered commands
         let command = match self.commands.get(tokens[next_token_index]) {
             Some(command) => command,
-            None => {
+            None          => {
                 respond(&self.config, webhook.clone(), String::from("Sorry the command was not found."));
                 return;
             }
@@ -138,22 +138,31 @@ pub fn respond(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks
     //TODO: Don't forget to change this when refactoring config
     //Get repo were following
     let github_follow_repo: String;
+    let github_owner_token: String;
     {
         let mut config = tsconfig.lock().unwrap();
         match config.get_string("config", "github_follow_repo") {
             Ok(_github_follow_repo) => github_follow_repo = _github_follow_repo,
-            Err(err)        => {
+            Err(err)                => {
                 thread_error!("Failed to acquire \"github_follow_repo\": {}", err);
                 panic!("Failed to acquire \"github_follow_repo\": {}", err);
             }
         }
+
+        //Get owner api token
+        match config.get_string("config", "github_owner_token") {
+            Ok(_github_owner_token) => github_owner_token = _github_owner_token,
+            Err(err)                => {
+                thread_error!("Error getting  the \"github_owner_token\" value from config: {}", err);
+                panic!("Error getting the \"github_owner_token\" value from config: {}", err);
+            }
+        }
     }
 
-    let endpoint = format!("repos/{}/issues/{}/comments", github_follow_repo, raw_event.number);
+    let endpoint = format!("repos/{}/issues/{}/comments?access_token={}", github_follow_repo, raw_event.number, github_owner_token);
     let message  = format!("{{body: \"@{} {}\"}}", raw_event.user, msg);
     match webhooks::github_post_request(endpoint, message) {
         Ok(())   => (),
         Err(err) => {thread_error!("{}", err);}
     }
-
 }

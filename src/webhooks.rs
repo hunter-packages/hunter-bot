@@ -519,7 +519,7 @@ pub fn extract_json_u64(object: &BTreeMap<String, serde_json::Value>, field: &'s
 
 pub fn register(config: &mut config::ConfigHandler) {
 
-    trace!("webhooks.rs: register()");
+    trace!("webhooks.rs: register(config)");
 
     //List of events to listent for.
     let hooks = vec!["issue_comment","pull_request_review_comment"];
@@ -566,7 +566,7 @@ pub fn register(config: &mut config::ConfigHandler) {
     let github_owner_token: String;
     match config.get_string("config", "github_owner_token") {
         Ok(_github_owner_token) => github_owner_token = _github_owner_token,
-        Err(err)          => {panic!("Error getting  the \"github_owner_token\" value from config: {}", err);}
+        Err(err)                => {panic!("Error getting  the \"github_owner_token\" value from config: {}", err);}
     }
 
     //Create JSON data
