@@ -95,7 +95,13 @@ impl CommandHandler {
         {
             let mut config      = self.config.lock().unwrap();
             is_user_whitelisted = config.whitelist_validate_user(webhook.clone().user);
-            bot_name            = try!(config.get_string("config", "github_bot_name"));
+            bot_name            = match config.get_string("config", "github_bot_name") {
+                Ok(name) => name,
+                Err(err) => {
+                    thread_error!("Failed to acquire \"github_bot_name\": {}", err);
+                    panic!("Failed to acquire \"github_bot_name\": {}", err);
+                }
+            }
         }
 
         //Ignore commands/responses from the bot
