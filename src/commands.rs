@@ -76,6 +76,7 @@ impl CommandHandler {
         let mut is_please_provided  = false;
         let mut is_user_whitelisted = false;
         let mut next_token_index    = 0;
+        let mut bot_name            = String::new();
 
         thread_debug!("Command tokens: {:?}", tokens);
 
@@ -92,8 +93,16 @@ impl CommandHandler {
         //  to unlock before letting the callback lock it
         //  given that locking twice will induce a panic.
         {
-            let mut config = self.config.lock().unwrap();
+            let mut config      = self.config.lock().unwrap();
             is_user_whitelisted = config.whitelist_validate_user(webhook.clone().user);
+            bot_name            = try!(config.get_string("config", "github_bot_name"));
+        }
+
+        //Ignore commands/responses from the bot
+        thread_trace!("Check if command is from bot.");
+        if bot_name == webhook.user {
+            thread_trace!("Command is from bot, return.");
+            return;
         }
 
         //Find command among registered commands
@@ -153,7 +162,8 @@ impl CommandHandler {
 //                        Callbacks                       //
 ////////////////////////////////////////////////////////////
 
-pub fn ping(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks::WebhookEvent, Args: Vec<&str>) -> Result<String, String> {
+#[allow(unused_variables)]
+pub fn ping(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks::WebhookEvent, args: Vec<&str>) -> Result<String, String> {
     return Ok(String::from("Pong"))
 }
 

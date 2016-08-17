@@ -14,7 +14,6 @@ use hyper::Client;
 use hyper::client::Body;
 use hyper::client::IntoUrl;
 use hyper::header::Headers;
-use hyper::Url;
 
 extern crate iron;
 use self::iron::middleware;
@@ -119,7 +118,6 @@ impl middleware::Handler for WebhookHandler {
         }
 
         let webhook_event_type = WebhookEventType::from_string(&github_event_string[..]);
-        let webhook_event: WebhookEvent;
         match webhook_event_type {
             WebhookEventType::Ping               => {
                 return Ok(Response::with((status::Ok, "Pong.")))
@@ -367,7 +365,6 @@ pub fn github_post_request(endpoint: String, body: String) -> Result<(), String>
     let     api_call      = format!("https://api.github.com/{}", endpoint);
     let     body_len      = body.len().clone();
     let mut header        = Headers::new();
-    let mut response_body = String::new();
 
     thread_trace!("  Api call to url");
     let api_call_url = match api_call.into_url() {
@@ -383,7 +380,7 @@ pub fn github_post_request(endpoint: String, body: String) -> Result<(), String>
 
     header.set_raw("User-Agent", vec![b"hunter-bot".to_vec()]);
     thread_trace!("  Post request");
-    let mut response = match http_client.post(api_call_url)
+    let response = match http_client.post(api_call_url)
         .headers(header)
         .body(Body::BufBody(&body.into_bytes()[..], body_len))
         .send() {
@@ -681,7 +678,7 @@ pub fn listen(config: &mut config::ConfigHandler) {
     drop(config);
 
     //Process events
-    let mut command_handler = commands::CommandHandler::new(&tsconfig);
+    let command_handler = commands::CommandHandler::new(&tsconfig);
     thread_debug!("command_handler: {:?}", command_handler);
     loop {
 

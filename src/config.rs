@@ -2,7 +2,7 @@
 //All rights reserved.
 
 use std::error::Error;
-use std::fs::{File, Metadata, OpenOptions};
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
