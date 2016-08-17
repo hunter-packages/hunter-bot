@@ -42,6 +42,7 @@ namespace
 showstopper
 toolchain
 toolchains
+virtualenv
 wiki
 workarounded
 workflow
