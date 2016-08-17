@@ -681,6 +681,7 @@ pub fn listen(config: &mut config::ConfigHandler) {
 
     //Process events
     let mut command_handler = commands::CommandHandler::new(&tsconfig);
+    thread_debug!("command_handler: {:?}", command_handler);
     loop {
 
         //Dequeue
