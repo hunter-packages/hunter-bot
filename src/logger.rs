@@ -70,12 +70,12 @@ impl Logger {
                 }
 
                 //rotate if needed
-                if needs_rotate(&msg_log_file_name, log_size) {
+                if needs_rotate(&msg_log_file_name, log_size) && unsafe{!stopped} {
                     msg_log_file_name = get_next_logfile_path(&log_dir, "log-msg");
                     msg_log_file.write(format!("***INFO: Log has been rotated, further messages are in {}", msg_log_file_name).as_bytes());
                     msg_log_file      = open_log_file(&msg_log_file_name);
                 }
-                if needs_rotate(&err_log_file_name, log_size) {
+                if needs_rotate(&err_log_file_name, log_size) && unsafe{!stopped} {
                     err_log_file_name = get_next_logfile_path(&log_dir, "log-err");
                     err_log_file.write(format!("***INFO: Log has been rotated, further messages are in {}", msg_log_file_name).as_bytes());
                     err_log_file      = open_log_file(&err_log_file_name);
@@ -94,7 +94,7 @@ impl log::Log for Logger {
         if self.enabled(record.metadata()) {
             let log_tx        = self.log_tx.clone();
             let time_and_date = Local::now().format("%v %H:%M:%S:%f").to_string();
-            let internal      = format!("{}\n", record.args());
+            let internal      = format!("{}", record.args());
             let log_message   = format!("{}: {} {}\n", time_and_date, get_padded_loglevel_string(record.level().clone()), record.args());
             if (internal == String::from("**INTERNAL** STOP!!!") && record.level().clone() == LogLevel::Error) || unsafe{!stopped}{
                 unsafe{stopped = true;}
@@ -166,7 +166,6 @@ pub fn needs_rotate(file_name: &String, log_size: u64) -> bool{
     let metadata = match fs::metadata(file_name) {
         Ok(metadata) => metadata,
         Err(err)     => {
-            error!("**INTERNAL** STOP!!!");
             panic!("Failed to acquire metadata of the current log file: {}", err.description());
         }
     };

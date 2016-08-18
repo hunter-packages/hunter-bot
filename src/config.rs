@@ -8,6 +8,8 @@ use std::path::PathBuf;
 
 extern crate toml;
 
+include!("logger_macros.rs");
+
 ////////////////////////////////////////////////////////////
 //                     ConfigHandler                      //
 ////////////////////////////////////////////////////////////
@@ -288,21 +290,21 @@ impl ConfigHandler {
     //TODO: return an error on get failure
     pub fn whitelist_validate_user(&mut self, user: String) -> bool {
 
-        trace!("config.rs: ConfigHandler::whitelist_validate_user(&mut self, \"{}\")", user);
+        thread_trace!("config.rs: ConfigHandler::whitelist_validate_user(&mut self, \"{}\")", user);
 
         //Repo owner is always whitelisted
-        trace!("  Get repo owner from config");
+        thread_trace!("  Get repo owner from config");
         match ConfigHandler::get_string(self, "config", "github_owner_name") {
             Ok(owner_name) => {
-                trace!("    Is user the repo owner test");
+                thread_trace!("    Is user the repo owner test");
                 if owner_name == user {
-                    trace!("Return true");
+                    thread_trace!("Return true");
                     return true;
                 }
             }
             Err(_)         => {
                 //NOTE: This could be omitted once config validation is done.
-                trace!("Return false (error getting the config)");
+                thread_trace!("Return false (error getting the config)");
                 return false
             }
         }
@@ -310,14 +312,14 @@ impl ConfigHandler {
         let whitelist: Vec<toml::Value>;
         match self.get_array("config", "whitelist") {
             Ok(_whitelist) => whitelist = _whitelist,
-            Err(err)       => {panic!("Error while getting the whitelist: {}", err);}
+            Err(err)       => {thread_crash!("Error while getting the whitelist: {}", err);}
         }
 
-        trace!("whitelist.contains(\"{}\")", user);
+        thread_trace!("whitelist.contains(\"{}\")", user);
         let is_valid_user = whitelist.contains(&toml::Value::String(user.clone()));
 
-        debug!("User {} is whitelisted: {}", user, is_valid_user);
-        trace!("Return {}", is_valid_user);
+        thread_debug!("User {} is whitelisted: {}", user, is_valid_user);
+        thread_trace!("Return {}", is_valid_user);
         return is_valid_user;
     }
 }

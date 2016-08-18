@@ -5,7 +5,6 @@ use std::error::Error;
 use std::fs;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
-use std::process::exit;
 use std::str::FromStr;
 
 extern crate clap;
@@ -22,8 +21,9 @@ mod config;
 mod logger;
 mod webhooks;
 
+include!("logger_macros.rs");
+
 //TODO: Validate config values
-//TODO: validate user (whitelist)
 
 ////////////////////////////////////////////////////////////
 //                          Funcs                         //
@@ -185,11 +185,7 @@ fn main() {
 
     match config.load(&hunterbot_config_path.to_string()) {
         Ok(())   => {info!("Success!");}
-        Err(err) => {
-            error!("Error! {}", err);
-            error!("Exiting...");
-            exit(-1);
-        }
+        Err(err) => {crash!("Error loading the config: {}", err);}
     }
     debug!("config: {:?}", config);
 

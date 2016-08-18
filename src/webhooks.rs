@@ -541,21 +541,21 @@ pub fn register(config: &mut config::ConfigHandler) {
     let mut github_webhook_secret: String;
     match config.get_string("state", "github_webhook_secret") {
         Ok(_github_webhook_secret) => github_webhook_secret = _github_webhook_secret,
-        Err(err)                   => {panic!("Error getting  the \"github_webhook_secret\" value from config: {}", err);}
+        Err(err)                   => {crash!("Error getting  the \"github_webhook_secret\" value from config: {}", err);}
     }
 
     if github_webhook_secret == String::new() {
         // Get the system RNG
         let mut rng = match rand::os::OsRng::new() {
             Ok(_rng) => _rng,
-            Err(err) => panic!("Failed to obtain OS RNG: {}", err)
+            Err(err) => {crash!("Failed to obtain OS RNG: {}", err);}
         };
 
         github_webhook_secret = rng.next_u64().to_string();
         config.set_string("state", "github_webhook_secret", &github_webhook_secret.clone()[..]);
         match config.save() {
             Ok(()) => (),
-            Err(_) => {panic!("Failed to save the config file.");}
+            Err(_) => {crash!("Failed to save the config file.");}
         }
     }
 
@@ -563,14 +563,14 @@ pub fn register(config: &mut config::ConfigHandler) {
     let github_follow_repo: String;
     match config.get_string("config", "github_follow_repo") {
         Ok(_github_follow_repo) => github_follow_repo = _github_follow_repo,
-        Err(err)          => {panic!("Error getting  the \"github_follow_repo\" value from config: {}", err);}
+        Err(err)          => {crash!("Error getting  the \"github_follow_repo\" value from config: {}", err);}
     }
 
     //Get owner api token
     let github_owner_token: String;
     match config.get_string("config", "github_owner_token") {
         Ok(_github_owner_token) => github_owner_token = _github_owner_token,
-        Err(err)                => {panic!("Error getting  the \"github_owner_token\" value from config: {}", err);}
+        Err(err)                => {crash!("Error getting  the \"github_owner_token\" value from config: {}", err);}
     }
 
     //Create JSON data
@@ -581,13 +581,13 @@ pub fn register(config: &mut config::ConfigHandler) {
     let mut public_ip_address: String;
     match config.get_string("config", "public_ip_address") {
         Ok(_public_ip_address) => public_ip_address = _public_ip_address,
-        Err(err)               => {panic!("Error getting  the \"public_ip_address\" value from config: {}", err);}
+        Err(err)               => {crash!("Error getting  the \"public_ip_address\" value from config: {}", err);}
     }
 
     let listen_port: String;
     match config.get_string("config", "listen_port") {
         Ok(_listen_port) => listen_port = _listen_port,
-        Err(err)         => {panic!("Error getting  the \"listen_port\" value from config: {}", err);}
+        Err(err)         => {crash!("Error getting  the \"listen_port\" value from config: {}", err);}
     }
 
     public_ip_address.push_str(":");
@@ -611,14 +611,14 @@ pub fn register(config: &mut config::ConfigHandler) {
     let json_data_string: String;
     match serde_json::to_string(&json_data) {
         Ok(_json_data_string) => json_data_string = _json_data_string,
-        Err(err)              => {panic!("Faild to create JSON data to initialize webhooks: {}", err.description());}
+        Err(err)              => {crash!("Faild to create JSON data to initialize webhooks: {}", err.description());}
     }
 
     //Register webhooks
     let endpoint = format!("repos/{}/hooks?access_token={}", github_follow_repo, github_owner_token);
     match github_post_request(endpoint, json_data_string) {
         Ok(())   => (),
-        Err(err) => {panic!("Failed to register webhooks: {}", err)}
+        Err(err) => {crash!("Failed to register webhooks: {}", err);}
     }
 
     info!("Success!");
@@ -637,7 +637,7 @@ pub fn listen(config: &mut config::ConfigHandler) {
     let local_ip_address: String;
     match config.get_string("config", "local_ip_address") {
         Ok(_local_ip_address) => local_ip_address = _local_ip_address,
-        Err(err)              => {panic!("Error getting  the \"local_ip_address\" value from config: {}.", err);}
+        Err(err)              => {crash!("Error getting  the \"local_ip_address\" value from config: {}.", err);}
     }
 
     let mut local_ip_address_num_vec: Vec<u8> = Vec::new();
@@ -645,7 +645,7 @@ pub fn listen(config: &mut config::ConfigHandler) {
         let byte_parsed: u8;
         match byte.parse() {
             Ok(_byte_parsed) => byte_parsed = _byte_parsed,
-            Err(err)         => {panic!("Error parsing the ip address byte into a u8: {}.", err)}
+            Err(err)         => {crash!("Error parsing the ip address byte into a u8: {}.", err);}
         }
         local_ip_address_num_vec.push(byte_parsed);
     }
@@ -656,12 +656,12 @@ pub fn listen(config: &mut config::ConfigHandler) {
     let listen_port_u16   : u16;
     match config.get_string("config", "listen_port") {
         Ok(_listen_port) => listen_port_string = _listen_port,
-        Err(err)         => {panic!("Error getting  the \"listen_port\" value from config: {}.", err);}
+        Err(err)         => {crash!("Error getting  the \"listen_port\" value from config: {}.", err);;}
     }
 
     match listen_port_string.parse() {
         Ok(_listen_port_u16) => listen_port_u16 = _listen_port_u16,
-        Err(err)             => {panic!("Error parsing the port into a u16: {}.", err)}
+        Err(err)             => {crash!("Error parsing the port into a u16: {}.", err);}
     }
 
     //Start server thread

@@ -1,11 +1,31 @@
 //Copyright (c) 2016, Ruslan Baratov, Alex Frappier Lachapelle
 //All rights reserved.
 
+use std::process::exit;
+
 extern crate thread_id;
 
 ////////////////////////////////////////////////////////////
 //                         Macros                         //
 ////////////////////////////////////////////////////////////
+
+macro_rules! crash {
+    ($($msg:tt)*) => {
+        error!("**CRASH**: {}", format_args!($($msg)*));
+        error!("**INTERNAL** STOP!!!");
+        println!("**CRASH**: {}", format_args!($($msg)*));
+        exit(-1);
+    }
+}
+
+macro_rules! thread_crash {
+    ($($msg:tt)*) => {
+        thread_error!("**CRASH**: {}", format_args!($($msg)*));
+        error!("**INTERNAL** STOP!!!");
+        println!("**CRASH**: {}", format_args!($($msg)*));
+        exit(-1);
+    }
+}
 
 macro_rules! thread_error {
     ($($msg:tt)*) => {

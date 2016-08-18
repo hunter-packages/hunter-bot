@@ -98,8 +98,7 @@ impl CommandHandler {
             bot_name            = match config.get_string("config", "github_bot_name") {
                 Ok(name) => name,
                 Err(err) => {
-                    thread_error!("Failed to acquire \"github_bot_name\": {}", err);
-                    panic!("Failed to acquire \"github_bot_name\": {}", err);
+                    thread_crash!("Failed to acquire \"github_bot_name\": {}", err);
                 }
             }
         }
@@ -191,8 +190,7 @@ pub fn respond(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks
         match config.get_string("config", "github_follow_repo") {
             Ok(_github_follow_repo) => github_follow_repo = _github_follow_repo,
             Err(err)                => {
-                thread_error!("Failed to acquire \"github_follow_repo\": {}", err);
-                panic!("Failed to acquire \"github_follow_repo\": {}", err);
+                thread_crash!("Failed to acquire \"github_follow_repo\": {}", err);;
             }
         }
 
@@ -200,8 +198,7 @@ pub fn respond(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks
         match config.get_string("config", "github_bot_token") {
             Ok(_github_owner_token) => github_owner_token = _github_owner_token,
             Err(err)                => {
-                thread_error!("Error getting  the \"github_owner_token\" value from config: {}", err);
-                panic!("Error getting the \"github_owner_token\" value from config: {}", err);
+                thread_crash!("Error getting the \"github_owner_token\" value from config: {}", err);
             }
         }
     }
