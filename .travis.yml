@@ -28,6 +28,30 @@ install:
   - which virtualenv
   - virtualenv --version
 
+  # Install Rust from archives {
+  - wget https://static.rust-lang.org/dist/rust-std-1.10.0-x86_64-unknown-linux-gnu.tar.gz
+  - tar xf rust-std-1.10.0-x86_64-unknown-linux-gnu.tar.gz
+
+  - wget https://static.rust-lang.org/dist/rust-1.10.0-x86_64-unknown-linux-gnu.tar.gz
+  - tar xf rust-1.10.0-x86_64-unknown-linux-gnu.tar.gz
+
+  - >
+    mv
+    rust-std-1.10.0-x86_64-unknown-linux-gnu/rust-std-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu
+    rust-1.10.0-x86_64-unknown-linux-gnu/rustc/lib/rustlib
+  # }
+
+  - export PATH="`pwd`/rust-1.10.0-x86_64-unknown-linux-gnu/rustc/bin:$PATH"
+  - export PATH="`pwd`/rust-1.10.0-x86_64-unknown-linux-gnu/cargo/bin:$PATH"
+
+  - which cargo
+  - cargo --version
+
+  - which rustc
+  - rustc --version
+
 script:
   - cd docs
   - ./jenkins.sh
+
+  - cargo build --verbose
