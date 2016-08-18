@@ -8,5 +8,6 @@ testing and automatically releases creation during development process of
 .. toctree::
    :maxdepth: 2
 
+   /install-rust
    /install
    /build-docs
