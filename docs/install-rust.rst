@@ -47,4 +47,8 @@ Run build:
 
   > cargo build --verbose
 
+.. seealso::
+
+  * `Ansible role <https://galaxy.ansible.com/ruslo/rust/>`__
+
 .. _merge them: https://users.rust-lang.org/t/cant-find-create-for-std/3464/5
