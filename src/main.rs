@@ -23,8 +23,6 @@ mod webhooks;
 
 include!("logger_macros.rs");
 
-//TODO: Validate config values
-
 ////////////////////////////////////////////////////////////
 //                          Funcs                         //
 ////////////////////////////////////////////////////////////
@@ -167,8 +165,10 @@ fn main() {
 
     //Start logger
     let (logger, rx) = logger::Logger::new(&max_log_level);
-    //TODO: check value for errors
-    logger::Logger::init(logger, max_log_level);
+    match logger::Logger::init(logger, max_log_level) {
+        Ok(())   => (),
+        Err(err) => {panic!("Failed to initialize the logger: {}", err);}
+    }
     logger::Logger::process_logs(rx, PathBuf::from(hunterbot_log_dir), log_size);
 
     info!("Logger booted.");
