@@ -9,7 +9,6 @@ use std::path::PathBuf;
 use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::thread;
 
 extern crate chrono;
 use self::chrono::*;
@@ -17,7 +16,8 @@ use self::chrono::*;
 use log;
 use log::{LogRecord, LogLevel, LogLevelFilter, LogMetadata, SetLoggerError};
 
-//TODO: stop logger on panic
+include!("logger_macros.rs");
+
 ////////////////////////////////////////////////////////////
 //                         Logger                         //
 ////////////////////////////////////////////////////////////
@@ -48,7 +48,7 @@ impl Logger {
     }
 
     pub fn process_logs(rx: Receiver<(String, LogLevel)>, log_dir: PathBuf, log_size: u64) {
-        thread::spawn(move || {
+        thread::Builder::new().name(String::from("log")).spawn(move || {
 
             //Open log files
             let mut msg_log_file_name = get_next_logfile_path(&log_dir, "log-msg");
@@ -136,12 +136,12 @@ pub fn get_next_logfile_path(log_dir: &PathBuf, variant: &str) -> String {
                         match path.to_str() {
                             Some(file) => return String::from(file),
                             None       => {
-                                panic!("Failed to get file name from PathBuf (invalid UTF-8)");
+                                thread_crash!("Failed to get file name from PathBuf (invalid UTF-8)");
                             }
                         }
                     },
-                    ErrorKind::PermissionDenied => {panic!("Cannot open {} to write logs into: Permission Denied.", path.display());}
-                    _                           => {panic!("Failed to open log file: {}", err);}
+                    ErrorKind::PermissionDenied => {thread_crash!("Cannot open {} to write logs into: Permission Denied.", path.display());}
+                    _                           => {thread_crash!("Failed to open log file: {}", err);}
                 }
             }
         }
@@ -153,7 +153,7 @@ pub fn get_next_logfile_path(log_dir: &PathBuf, variant: &str) -> String {
 pub fn open_log_file(file_name: &String ) -> File {
     match OpenOptions::new().write(true).create(true).open(file_name) {
         Ok(file) => return file,
-        Err(err) => {panic!("Failed to crate log file: {}", err.description());}
+        Err(err) => {thread_crash!("Failed to crate log file: {}", err.description());}
     };
 }
 
@@ -162,9 +162,7 @@ pub fn needs_rotate(file_name: &String, log_size: u64) -> bool{
     //get metadata
     let metadata = match fs::metadata(file_name) {
         Ok(metadata) => metadata,
-        Err(err)     => {
-            panic!("Failed to acquire metadata of the current log file: {}", err.description());
-        }
+        Err(err)     => {thread_crash!("Failed to acquire metadata of the current log file: {}", err.description());}
     };
 
     if metadata.len()/1000000 > log_size {

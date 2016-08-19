@@ -1,9 +1,9 @@
 //Copyright (c) 2016, Ruslan Baratov, Alex Frappier Lachapelle
 //All rights reserved.
 
-use std::{thread, time};
+use std::thread;
+use std::time;
 
-extern crate thread_id;
 
 ////////////////////////////////////////////////////////////
 //                        Functions                       //
@@ -14,6 +14,13 @@ pub fn hang() -> ! {
     loop{
         thread::sleep(time);
     }
+}
+
+pub fn thread_name() -> String {
+    let mut thread_name = thread::current().name().unwrap_or("<unknown>").to_string();
+    thread_name         = thread_name.replace("<", "");
+    thread_name         = thread_name.replace(">", "");
+    thread_name
 }
 
 ////////////////////////////////////////////////////////////
@@ -44,30 +51,30 @@ macro_rules! thread_crash {
 
 macro_rules! thread_error {
     ($($msg:tt)*) => {
-        error!("Thread ID {}: {}", thread_id::get(), format_args!($($msg)*));
+        error!("Thread '{}': {}", thread_name(), format_args!($($msg)*));
     }
 }
 
 macro_rules! thread_warn {
     ($($msg:tt)*) => {
-        warn!("Thread ID {}: {}", thread_id::get(), format_args!($($msg)*));
+        warn!("Thread '{}': {}", thread_name(), format_args!($($msg)*));
     }
 }
 
 macro_rules! thread_info {
     ($($msg:tt)*) => {
-        info!("Thread ID {}: {}", thread_id::get(), format_args!($($msg)*));
+        info!("Thread '{}': {}", thread_name(), format_args!($($msg)*));
     }
 }
 
 macro_rules! thread_debug {
     ($($msg:tt)*) => {
-        debug!("Thread ID {}: {}", thread_id::get(), format_args!($($msg)*));
+        debug!("Thread '{}': {}", thread_name(), format_args!($($msg)*));
     }
 }
 
 macro_rules! thread_trace {
     ($($msg:tt)*) => {
-        trace!("Thread ID {}: {}", thread_id::get(), format_args!($($msg)*));
+        trace!("Thread '{}': {}", thread_name(), format_args!($($msg)*));
     }
 }

@@ -94,7 +94,6 @@ fn dir_path_validator(dir_path: String) -> Result<(), String> {
     }
 }
 
-
 fn max_log_level_validator(max_log_level: String) -> Result<(), String> {
     match &max_log_level.to_lowercase()[..] {
         "off"   => return Ok(()),
@@ -171,20 +170,20 @@ fn main() {
     }
     logger::Logger::process_logs(rx, PathBuf::from(hunterbot_log_dir), log_size);
 
-    info!("Logger booted.");
-    debug!("matches: {:?}", matches);
-    debug!("hunterbot_config_path: {}", hunterbot_config_path);
-    debug!("hunterbot_log_dir: {}", hunterbot_log_dir);
-    debug!("log_size: {}", log_size);
-    debug!("max_log_level: {}", max_log_level);
+    thread_info!("Logger booted.");
+    thread_debug!("matches: {:?}", matches);
+    thread_debug!("hunterbot_config_path: {}", hunterbot_config_path);
+    thread_debug!("hunterbot_log_dir: {}", hunterbot_log_dir);
+    thread_debug!("log_size: {}", log_size);
+    thread_debug!("max_log_level: {}", max_log_level);
 
     //Load config
     let mut config = config::ConfigHandler::new();
 
-    info!("Opening config...");
+    thread_info!("Opening config...");
     match config.load(&hunterbot_config_path.to_string()) {
-        Ok(())   => {info!("Success!");}
-        Err(err) => {crash!("Error loading the config: {}", err);}
+        Ok(())   => {thread_info!("Success!");}
+        Err(err) => {thread_crash!("Error loading the config: {}", err);}
     }
 
     config.validate();

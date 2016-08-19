@@ -49,7 +49,7 @@ pub struct WebhookHandler {
 
 impl WebhookHandler {
     pub fn new(tsconfig: Arc<Mutex<config::ConfigHandler>>, queue: Arc<Mutex<Sender<WebhookEvent>>>) -> WebhookHandler {
-        trace!("webhooks.rs: WebhookHandler::new(tsconfig, queue)");
+        thread_trace!("webhooks.rs: WebhookHandler::new(tsconfig, queue)");
         WebhookHandler{
             config:   tsconfig.clone(),
             queue_tx: queue.clone()
@@ -101,7 +101,7 @@ impl middleware::Handler for WebhookHandler {
         match extract_header_string(&request.headers, "X-GitHub-Event") {
             Ok(signature) => github_event_string = signature,
             Err(err)      => {
-                error!("Failed to extract the \"X-GitHub-Event\" from a github webhook header: {}", err);
+                thread_error!("Failed to extract the \"X-GitHub-Event\" from a github webhook header: {}", err);
                 return Ok(Response::with((status::InternalServerError, err)))
             }
         }
@@ -111,7 +111,7 @@ impl middleware::Handler for WebhookHandler {
         match serde_json::from_str(&body_string[..]) {
             Ok(_body_value) => body_value = _body_value,
             Err(err)        => {
-                error!("{}", format!("Failed to parse the request body in a github webhook: {}.", err));
+                thread_error!("{}", format!("Failed to parse the request body in a github webhook: {}.", err));
                 return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body: {}.", err))))
             }
         }
@@ -132,7 +132,7 @@ impl middleware::Handler for WebhookHandler {
                         }
                     }
                     Err(err)                 => {
-                        error!("{}", format!("Failed to parse the request body data in a github webhook: {}.", err));
+                        thread_error!("{}", format!("Failed to parse the request body data in a github webhook: {}.", err));
                         return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body data: {}.", err))))
                     }
                 }
@@ -146,7 +146,7 @@ impl middleware::Handler for WebhookHandler {
                         }
                     }
                     Err(err)                 => {
-                        error!("{}", format!("Failed to parse the request body data in a github webhook: {}.", err));
+                        thread_error!("{}", format!("Failed to parse the request body data in a github webhook: {}.", err));
                         return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body data: {}.", err))))
                     }
                 }
@@ -504,13 +504,13 @@ pub fn extract_json_u64(object: &BTreeMap<String, serde_json::Value>, field: &'s
 
 pub fn register(config: &mut config::ConfigHandler) {
 
-    trace!("webhooks.rs: register(config)");
+    thread_trace!("webhooks.rs: register(config)");
 
     //List of events to listent for.
     let hooks = vec!["issue_comment","pull_request_review_comment"];
-    debug!("hooks: {:?}", hooks);
+    thread_debug!("hooks: {:?}", hooks);
 
-    info!("Setting up webhooks...");
+    thread_info!("Setting up webhooks...");
 
     //Get config vals
     let     github_follow_repo = config.get_string_required("config", "github_follow_repo");
@@ -532,14 +532,14 @@ pub fn register(config: &mut config::ConfigHandler) {
         // Get the system RNG
         let mut rng = match rand::os::OsRng::new() {
             Ok(_rng) => _rng,
-            Err(err) => {crash!("Failed to obtain OS RNG: {}", err);}
+            Err(err) => {thread_crash!("Failed to obtain OS RNG: {}", err);}
         };
 
         github_webhook_secret = rng.next_u64().to_string();
         config.set_string("state", "github_webhook_secret", &github_webhook_secret.clone()[..]);
         match config.save() {
             Ok(())   => (),
-            Err(err) => {crash!("Failed to save the config file: {}", err);}
+            Err(err) => {thread_crash!("Failed to save the config file: {}", err);}
         }
     }
 
@@ -569,17 +569,17 @@ pub fn register(config: &mut config::ConfigHandler) {
     let json_data_string: String;
     match serde_json::to_string(&json_data) {
         Ok(_json_data_string) => json_data_string = _json_data_string,
-        Err(err)              => {crash!("Faild to create JSON data to initialize webhooks: {}", err.description());}
+        Err(err)              => {thread_crash!("Faild to create JSON data to initialize webhooks: {}", err.description());}
     }
 
     //Register webhooks
     let endpoint = format!("repos/{}/hooks?access_token={}", github_follow_repo, github_owner_token);
     match github_post_request(endpoint, json_data_string) {
         Ok(())   => (),
-        Err(err) => {crash!("Failed to register webhooks: {}", err);}
+        Err(err) => {thread_crash!("Failed to register webhooks: {}", err);}
     }
 
-    info!("Success!");
+    thread_info!("Success!");
 }
 
 
@@ -598,7 +598,7 @@ pub fn listen(config: &mut config::ConfigHandler) {
     for byte in local_ip_address.split(".") {
         let byte_parsed: u8 = match byte.parse() {
             Ok(byte) => byte,
-            Err(err) => {crash!("Error parsing the ip address byte into a u8: {}.", err);}
+            Err(err) => {thread_crash!("Error parsing the ip address byte into a u8: {}.", err);}
         };
         local_ip_address_num_vec.push(byte_parsed);
     }
@@ -609,11 +609,11 @@ pub fn listen(config: &mut config::ConfigHandler) {
 
     let listen_port_u16: u16 = match listen_port_string.parse() {
         Ok(port) => port,
-        Err(err) => {crash!("Error parsing the port into a u16: {}.", err);}
+        Err(err) => {thread_crash!("Error parsing the port into a u16: {}.", err);}
     };
 
     //Start server thread
-    let server_thread = thread::spawn(move || {
+    let server_thread = thread::Builder::new().name(String::from("webhook")).spawn(move || {
         Iron::new(handler).http(
             SocketAddr::V4(
                 SocketAddrV4::new(
@@ -642,20 +642,3 @@ pub fn listen(config: &mut config::ConfigHandler) {
 
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
