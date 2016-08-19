@@ -96,7 +96,6 @@ fn dir_path_validator(dir_path: String) -> Result<(), String> {
 
 fn max_log_level_validator(max_log_level: String) -> Result<(), String> {
     match &max_log_level.to_lowercase()[..] {
-        "off"   => return Ok(()),
         "error" => return Ok(()),
         "warn"  => return Ok(()),
         "info"  => return Ok(()),
