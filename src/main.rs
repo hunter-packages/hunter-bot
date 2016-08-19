@@ -171,10 +171,10 @@ fn main() {
 
     thread_info!("Logger booted.");
     thread_debug!("matches: {:?}", matches);
-    thread_debug!("hunterbot_config_path: {}", hunterbot_config_path);
-    thread_debug!("hunterbot_log_dir: {}", hunterbot_log_dir);
-    thread_debug!("log_size: {}", log_size);
-    thread_debug!("max_log_level: {}", max_log_level);
+    thread_debug!("Option: hunterbot_config_path: {}", hunterbot_config_path);
+    thread_debug!("Option: hunterbot_log_dir:     {}", hunterbot_log_dir);
+    thread_debug!("Option: log_size:              {}", log_size);
+    thread_debug!("Option: max_log_level:         {}", max_log_level);
 
     //Load config
     let mut config = config::ConfigHandler::new();
