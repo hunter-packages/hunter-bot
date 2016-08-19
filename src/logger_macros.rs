@@ -1,9 +1,20 @@
 //Copyright (c) 2016, Ruslan Baratov, Alex Frappier Lachapelle
 //All rights reserved.
 
-use std::process::exit;
+use std::{thread, time};
 
 extern crate thread_id;
+
+////////////////////////////////////////////////////////////
+//                        Functions                       //
+////////////////////////////////////////////////////////////
+
+pub fn hang() -> ! {
+    let time = time::Duration::from_secs(1);
+    loop{
+        thread::sleep(time);
+    }
+}
 
 ////////////////////////////////////////////////////////////
 //                         Macros                         //
@@ -12,18 +23,22 @@ extern crate thread_id;
 macro_rules! crash {
     ($($msg:tt)*) => {
         error!("**CRASH**: {}", format_args!($($msg)*));
-        error!("**INTERNAL** STOP!!!");
         println!("**CRASH**: {}", format_args!($($msg)*));
-        exit(-1);
+        //Lets the remaining logs write to file before terminating the program.
+        error!("**INTERNAL** CRASH!!!");
+        //Hang until the program gets terminated
+        hang();
     }
 }
 
 macro_rules! thread_crash {
     ($($msg:tt)*) => {
         thread_error!("**CRASH**: {}", format_args!($($msg)*));
-        error!("**INTERNAL** STOP!!!");
         println!("**CRASH**: {}", format_args!($($msg)*));
-        exit(-1);
+        //Lets the remaining logs write to file before terminating the program.
+        error!("**INTERNAL** CRASH!!!");
+        //Hang until the program gets terminated
+        hang();
     }
 }
 

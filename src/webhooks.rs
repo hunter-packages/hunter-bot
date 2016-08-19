@@ -7,7 +7,6 @@ use std::io::Read;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender};
-use std::thread;
 
 extern crate hyper;
 use hyper::Client;
@@ -234,7 +233,6 @@ impl WebhookEvent {
         event.event_type = WebhookEventType::IssueComment;
 
         //Get and validate "action" string
-        thread_trace!("  Get \"action\" string (try!)");
         let action_string = try!(extract_json_string(&json_object, "action"));
 
         thread_trace!("  Is action create");
@@ -245,13 +243,10 @@ impl WebhookEvent {
         thread_trace!("    true");
 
         //Get "comment" Object
-        thread_trace!("  Get \"comment\" object (try!)");
         let comment_object = try!(extract_json_object_named(&json_object, "comment"));
 
         //Check if the bot was mentioned, i.e if the message is directed towards the bot
-        thread_trace!("  Get \"github_bot_name\" config string (try!)");
-        let github_bot_name     = try!(config.get_string("config", "github_bot_name"));
-        thread_trace!("  Get \"body\" string (try!)");
+        let github_bot_name     = config.get_string_required("config", "github_bot_name");
         let comment_body_string = try!(extract_json_string(&comment_object, "body"));
         let regex               = Regex::new(&format!("@{}", github_bot_name)[..]).unwrap();
 
@@ -266,17 +261,12 @@ impl WebhookEvent {
         }
 
         //Get "user" string
-        thread_trace!("  Get \"user\" object (try!)");
         let user_object = try!(extract_json_object_named(&comment_object, "user"));
-        thread_trace!("  Get \"login\" string (try!)");
         event.user      = try!(extract_json_string(&user_object, "login"));
 
         //Get "number" and "id" numbers
-        thread_trace!("  Get \"issue\" object (try!)");
         let issue_object = try!(extract_json_object_named(&json_object, "issue"));
-        thread_trace!("  Get \"number\" u64 (try!)");
         event.number     = try!(extract_json_u64(&issue_object, "number"));
-        thread_trace!("  Get \"id\" u64 (try!)");
         event.id         = try!(extract_json_u64(&issue_object, "id"));
 
         thread_trace!("Return Ok");
@@ -299,7 +289,6 @@ impl WebhookEvent {
         event.event_type = WebhookEventType::PullRequestComment;
 
         //Get and validate "action" string
-        thread_trace!("  Get \"action\" string (try!)");
         let action_string = try!(extract_json_string(&json_object, "action"));
 
         thread_trace!("  Is action create");
@@ -310,13 +299,10 @@ impl WebhookEvent {
         thread_trace!("    true");
 
         //Get "comment" Object
-        thread_trace!("  Get \"comment\" object (try!)");
         let comment_object = try!(extract_json_object_named(&json_object, "comment"));
 
         //Check if the bot was mentioned, i.e if the message is directed towards the bot
-        thread_trace!("  Get \"github_bot_name\" config string (try!)");
-        let github_bot_name     = try!(config.get_string("config", "github_bot_name"));
-        thread_trace!("  Get \"body\" string (try!)");
+        let github_bot_name     = config.get_string_required("config", "github_bot_name");
         let comment_body_string = try!(extract_json_string(&comment_object, "body"));
         let regex               = Regex::new(&format!("@{}", github_bot_name)[..]).unwrap();
 
@@ -331,17 +317,12 @@ impl WebhookEvent {
         }
 
         //Get "user" string
-        thread_trace!("  Get \"user\" object (try!)");
         let user_object = try!(extract_json_object_named(&comment_object, "comment"));
-        thread_trace!("  Get \"login\" string (try!)");
         event.user      = try!(extract_json_string(&user_object, "login"));
 
         //Get "number" and "id" numbers
-        thread_trace!("  Get \"issue\" object (try!)");
         let pull_request_object = try!(extract_json_object_named(&json_object, "pull_request"));
-        thread_trace!("  Get \"number\" u64 (try!)");
         event.number            = try!(extract_json_u64(&pull_request_object, "number"));
-        thread_trace!("  Get \"id\" u64 (try!)");
         event.id                = try!(extract_json_u64(&pull_request_object, "id"));
 
         thread_trace!("Return Ok");
@@ -531,6 +512,13 @@ pub fn register(config: &mut config::ConfigHandler) {
 
     info!("Setting up webhooks...");
 
+    //Get config vals
+    let     github_follow_repo = config.get_string_required("config", "github_follow_repo");
+    let     github_owner_token = config.get_string_required("config", "github_owner_token");
+    let     listen_port        = config.get_string_required("config", "listen_port");
+    let mut public_ip_address  = config.get_string_required("config", "public_ip_address");
+
+
     //Create a random number for the "secret"
     //which will be used for verifying that
     //github is the actual sender of the webhook
@@ -538,11 +526,7 @@ pub fn register(config: &mut config::ConfigHandler) {
 
     //Skip secret number generation if we already made one before
     //Get webhook secret
-    let mut github_webhook_secret: String;
-    match config.get_string("state", "github_webhook_secret") {
-        Ok(_github_webhook_secret) => github_webhook_secret = _github_webhook_secret,
-        Err(err)                   => {crash!("Error getting  the \"github_webhook_secret\" value from config: {}", err);}
-    }
+    let mut github_webhook_secret = config.get_string_required("state", "github_webhook_secret");
 
     if github_webhook_secret == String::new() {
         // Get the system RNG
@@ -554,41 +538,15 @@ pub fn register(config: &mut config::ConfigHandler) {
         github_webhook_secret = rng.next_u64().to_string();
         config.set_string("state", "github_webhook_secret", &github_webhook_secret.clone()[..]);
         match config.save() {
-            Ok(()) => (),
-            Err(_) => {crash!("Failed to save the config file.");}
+            Ok(())   => (),
+            Err(err) => {crash!("Failed to save the config file: {}", err);}
         }
-    }
-
-    //Get follow repo
-    let github_follow_repo: String;
-    match config.get_string("config", "github_follow_repo") {
-        Ok(_github_follow_repo) => github_follow_repo = _github_follow_repo,
-        Err(err)          => {crash!("Error getting  the \"github_follow_repo\" value from config: {}", err);}
-    }
-
-    //Get owner api token
-    let github_owner_token: String;
-    match config.get_string("config", "github_owner_token") {
-        Ok(_github_owner_token) => github_owner_token = _github_owner_token,
-        Err(err)                => {crash!("Error getting  the \"github_owner_token\" value from config: {}", err);}
     }
 
     //Create JSON data
     let mut json_data:        BTreeMap<String, serde_json::Value> = BTreeMap::new();
     let mut json_data_config: BTreeMap<String, serde_json::Value> = BTreeMap::new();
     let mut json_data_events: Vec<serde_json::Value>              = Vec::new();
-
-    let mut public_ip_address: String;
-    match config.get_string("config", "public_ip_address") {
-        Ok(_public_ip_address) => public_ip_address = _public_ip_address,
-        Err(err)               => {crash!("Error getting  the \"public_ip_address\" value from config: {}", err);}
-    }
-
-    let listen_port: String;
-    match config.get_string("config", "listen_port") {
-        Ok(_listen_port) => listen_port = _listen_port,
-        Err(err)         => {crash!("Error getting  the \"listen_port\" value from config: {}", err);}
-    }
 
     public_ip_address.push_str(":");
     public_ip_address.push_str(&listen_port[..]);
@@ -634,35 +592,25 @@ pub fn listen(config: &mut config::ConfigHandler) {
     let handler  = WebhookHandler::new(tsconfig.clone(), tsqueue.clone());
 
     //Get local_ip_address
-    let local_ip_address: String;
-    match config.get_string("config", "local_ip_address") {
-        Ok(_local_ip_address) => local_ip_address = _local_ip_address,
-        Err(err)              => {crash!("Error getting  the \"local_ip_address\" value from config: {}.", err);}
-    }
+    let local_ip_address = config.get_string_required("config", "local_ip_address");
 
     let mut local_ip_address_num_vec: Vec<u8> = Vec::new();
     for byte in local_ip_address.split(".") {
-        let byte_parsed: u8;
-        match byte.parse() {
-            Ok(_byte_parsed) => byte_parsed = _byte_parsed,
-            Err(err)         => {crash!("Error parsing the ip address byte into a u8: {}.", err);}
-        }
+        let byte_parsed: u8 = match byte.parse() {
+            Ok(byte) => byte,
+            Err(err) => {crash!("Error parsing the ip address byte into a u8: {}.", err);}
+        };
         local_ip_address_num_vec.push(byte_parsed);
     }
 
 
     //Get listen_port
-    let listen_port_string: String;
-    let listen_port_u16   : u16;
-    match config.get_string("config", "listen_port") {
-        Ok(_listen_port) => listen_port_string = _listen_port,
-        Err(err)         => {crash!("Error getting  the \"listen_port\" value from config: {}.", err);;}
-    }
+    let listen_port_string = config.get_string_required("config", "listen_port");
 
-    match listen_port_string.parse() {
-        Ok(_listen_port_u16) => listen_port_u16 = _listen_port_u16,
-        Err(err)             => {crash!("Error parsing the port into a u16: {}.", err);}
-    }
+    let listen_port_u16: u16 = match listen_port_string.parse() {
+        Ok(port) => port,
+        Err(err) => {crash!("Error parsing the port into a u16: {}.", err);}
+    };
 
     //Start server thread
     let server_thread = thread::spawn(move || {

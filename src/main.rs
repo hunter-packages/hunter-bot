@@ -141,7 +141,7 @@ fn main() {
     .arg(Arg::with_name("MAXLOGLEVEL")
         .short("m")
         .long("max-log-level")
-        .help("Sets the maximum logging level, \"Info\" is the default, valid values are (in increasing order): off, error, warn, info, debug, trace.")
+        .help("Sets the maximum logging level, \"Info\" is the default, valid values are (in increasing order): error, warn, info, debug, trace.")
         .validator(max_log_level_validator)
         .takes_value(true))
     .arg(Arg::with_name("LOGSIZE")
@@ -156,13 +156,12 @@ fn main() {
     let hunterbot_log_dir     = matches.value_of("LOG").unwrap_or("./");
     let log_size              = u64::from_str(matches.value_of("LOGSIZE").unwrap_or("5")).unwrap();
     let max_log_level         = match matches.value_of("MAXLOGLEVEL").unwrap_or("info") {
-        "off"   => LogLevelFilter::Off,
         "error" => LogLevelFilter::Error,
         "warn"  => LogLevelFilter::Warn,
         "info"  => LogLevelFilter::Info,
         "debug" => LogLevelFilter::Debug,
         "trace" => LogLevelFilter::Trace,
-        _       => LogLevelFilter::Off
+        _       => LogLevelFilter::Error
     };
 
 
@@ -181,13 +180,14 @@ fn main() {
 
     //Load config
     let mut config = config::ConfigHandler::new();
-    info!("Opening config...");
 
+    info!("Opening config...");
     match config.load(&hunterbot_config_path.to_string()) {
         Ok(())   => {info!("Success!");}
         Err(err) => {crash!("Error loading the config: {}", err);}
     }
-    debug!("config: {:?}", config);
+
+    config.validate();
 
     //Setup webhooks
     webhooks::register(&mut config);

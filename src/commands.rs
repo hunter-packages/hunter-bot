@@ -95,12 +95,7 @@ impl CommandHandler {
         {
             let mut config      = self.config.lock().unwrap();
             is_user_whitelisted = config.whitelist_validate_user(webhook.clone().user);
-            bot_name            = match config.get_string("config", "github_bot_name") {
-                Ok(name) => name,
-                Err(err) => {
-                    thread_crash!("Failed to acquire \"github_bot_name\": {}", err);
-                }
-            }
+            bot_name            = config.get_string_required("config", "github_bot_name");
         }
 
         //Ignore commands/responses from the bot
@@ -187,20 +182,8 @@ pub fn respond(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks
     let github_owner_token: String;
     {
         let mut config = tsconfig.lock().unwrap();
-        match config.get_string("config", "github_follow_repo") {
-            Ok(_github_follow_repo) => github_follow_repo = _github_follow_repo,
-            Err(err)                => {
-                thread_crash!("Failed to acquire \"github_follow_repo\": {}", err);;
-            }
-        }
-
-        //Get owner api token
-        match config.get_string("config", "github_bot_token") {
-            Ok(_github_owner_token) => github_owner_token = _github_owner_token,
-            Err(err)                => {
-                thread_crash!("Error getting the \"github_owner_token\" value from config: {}", err);
-            }
-        }
+        github_follow_repo = config.get_string_required("config", "github_follow_repo");
+        github_owner_token = config.get_string_required("config", "github_bot_token");
     }
 
     let endpoint = format!("repos/{}/issues/{}/comments?access_token={}", github_follow_repo, raw_event.number, github_owner_token);

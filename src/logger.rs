@@ -6,6 +6,7 @@ use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::PathBuf;
+use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
@@ -15,9 +16,6 @@ use self::chrono::*;
 
 use log;
 use log::{LogRecord, LogLevel, LogLevelFilter, LogMetadata, SetLoggerError};
-
-//An ugly hack i know...
-static mut stopped: bool = false;
 
 //TODO: stop logger on panic
 ////////////////////////////////////////////////////////////
@@ -63,19 +61,19 @@ impl Logger {
                 let (log, log_level) = rx.recv().unwrap();
 
                 if log_level == LogLevel::Error {
-                    if log == String::from("**INTERNAL** STOP!!!") {break;}
+                    if log == String::from("**INTERNAL** CRASH!!!") {exit(-1);}
                     err_log_file.write(log.as_bytes());
                 } else {
                     msg_log_file.write(log.as_bytes());
                 }
 
                 //rotate if needed
-                if needs_rotate(&msg_log_file_name, log_size) && unsafe{!stopped} {
+                if needs_rotate(&msg_log_file_name, log_size) {
                     msg_log_file_name = get_next_logfile_path(&log_dir, "log-msg");
                     msg_log_file.write(format!("***INFO: Log has been rotated, further messages are in {}", msg_log_file_name).as_bytes());
                     msg_log_file      = open_log_file(&msg_log_file_name);
                 }
-                if needs_rotate(&err_log_file_name, log_size) && unsafe{!stopped} {
+                if needs_rotate(&err_log_file_name, log_size) {
                     err_log_file_name = get_next_logfile_path(&log_dir, "log-err");
                     err_log_file.write(format!("***INFO: Log has been rotated, further messages are in {}", msg_log_file_name).as_bytes());
                     err_log_file      = open_log_file(&err_log_file_name);
@@ -96,9 +94,8 @@ impl log::Log for Logger {
             let time_and_date = Local::now().format("%v %H:%M:%S:%f").to_string();
             let internal      = format!("{}", record.args());
             let log_message   = format!("{}: {} {}\n", time_and_date, get_padded_loglevel_string(record.level().clone()), record.args());
-            if (internal == String::from("**INTERNAL** STOP!!!") && record.level().clone() == LogLevel::Error) || unsafe{!stopped}{
-                unsafe{stopped = true;}
-                log_tx.lock().unwrap().send((log_message, record.level()));
+            if internal == String::from("**INTERNAL** CRASH!!!") && record.level().clone() == LogLevel::Error {
+                log_tx.lock().unwrap().send((internal, record.level()));
             } else {
                 log_tx.lock().unwrap().send((log_message, record.level()));
             }

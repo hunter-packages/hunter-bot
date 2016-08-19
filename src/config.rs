@@ -100,7 +100,7 @@ impl ConfigHandler {
     //TODO: fix oks
     pub fn save(&mut self) -> Result<(), String> {
 
-        trace!("config.rs: ConfigHandler::save()");
+        trace!("config.rs: ConfigHandler::save(&mut self)");
 
         let toml_data_string = toml::encode_str(&self.toml_data);
 
@@ -130,6 +130,68 @@ impl ConfigHandler {
         }
         trace!("Return Ok");
         Ok(())
+    }
+
+    //Validates config, checks for non empty values in required config keys
+    //Would rather crash now than crash way later on
+    pub fn validate(&mut self) {
+
+        trace!("config.rs: ConfigHandler::validate(&mut self)");
+
+        let github_bot_name = self.get_string_required("config", "github_bot_name");
+        if github_bot_name == String::new() {
+            crash!("Required config value of \"github_bot_name\" must be non-empty.");
+        }
+
+        let github_bot_token = self.get_string_required("config", "github_bot_token");
+        if github_bot_token == String::new() {
+            crash!("Required config value of \"github_bot_token\" must be non-empty.");
+        }
+
+        let github_follow_repo = self.get_string_required("config", "github_follow_repo");
+        if github_follow_repo == String::new() {
+            crash!("Required config value of \"github_follow_repo\" must be non-empty.");
+        }
+
+        let github_owner_name = self.get_string_required("config", "github_owner_name");
+        if github_owner_name == String::new() {
+            crash!("Required config value of \"github_owner_name\" must be non-empty.");
+        }
+
+        let github_owner_token = self.get_string_required("config", "github_owner_token");
+        if github_owner_token == String::new() {
+            crash!("Required config value of \"github_owner_token\" must be non-empty.");
+        }
+
+        let listen_port = self.get_string_required("config", "listen_port");
+        if listen_port == String::new() {
+            crash!("Required config value of \"listen_port\" must be non-empty.");
+        }
+
+        let local_ip_address = self.get_string_required("config", "local_ip_address");
+        if local_ip_address == String::new() {
+            crash!("Required config value of \"local_ip_address\" must be non-empty.");
+        }
+
+        let public_ip_address = self.get_string_required("config", "public_ip_address");
+        if public_ip_address == String::new() {
+            crash!("Required config value of \"public_ip_address\" must be non-empty.");
+        }
+
+        //Ok to be empty
+        let whitelist = self.get_array_required("config", "whitelist");
+
+        info!("Config validation passed.");
+        debug!("Config value \"github_bot_name\" =    \"{}\"", github_bot_name);
+        debug!("Config value \"github_bot_token\" =   \"{}\"", github_bot_token);
+        debug!("Config value \"github_follow_repo\" = \"{}\"", github_follow_repo);
+        debug!("Config value \"github_owner_name\" =  \"{}\"", github_owner_name);
+        debug!("Config value \"github_owner_token\" = \"{}\"", github_owner_token);
+        debug!("Config value \"listen_port\" =        \"{}\"", listen_port);
+        debug!("Config value \"local_ip_address\" =   \"{}\"", local_ip_address);
+        debug!("Config value \"public_ip_address\" =  \"{}\"", public_ip_address);
+        debug!("Config value \"whitelist\" =          {:?}",  whitelist);
+
     }
 
     //Sets a config key-value pair
@@ -214,20 +276,27 @@ impl ConfigHandler {
                 }
             } else {
                 trace!("      false");
-                trace!("      Create key and insert empty string");
-                section_data.insert(key.to_string(), toml::Value::String(String::new()));
-                self.toml_data.insert(section.to_string(), toml::Value::Table(section_data));
-                trace!("Return Ok");
-                return Ok(String::new());
+                trace!("Return Err");
+                return Err(format!("Key \"{}\" in section \"[{}]\" does not exist.", key, section));
             }
         } else {
             trace!("    false");
-            trace!("    Create section and insert empty string as value for key");
-            let mut table = toml::Table::new();
-            table.insert(key.to_string(), toml::Value::String(String::new()));
-            self.toml_data.insert(section.to_string(), toml::Value::Table(table));
-            trace!("Return Ok");
-            return Ok(String::new());
+            trace!("Return Err");
+            return Err(format!("Section \"[{}]\" does not exist.", section));
+        }
+    }
+
+    //Same as get_string() but crashes if key/value pair is missing as its required for the bot to function
+    pub fn get_string_required(&mut self, section: &str, key: &str) -> String {
+        thread_trace!("config.rs: ConfigHandler::get_string_required(&mut self, \"{}\", \"{}\")", section, key);
+        match self.get_string(&section, &key) {
+            Ok(value) => {
+                thread_trace!("Return value");
+                return value
+            },
+            Err(err)  => {
+                thread_crash!("Error getting the value of \"{}\" from the config which is required: {}", key, err);
+            }
         }
     }
 
@@ -268,52 +337,45 @@ impl ConfigHandler {
             } else {
 
                 trace!("      false");
-                trace!("      Insert empty table");
-                section_data.insert(key.to_string(), toml::Value::Array(toml::Array::new()));
-                self.toml_data.insert(section.to_string(), toml::Value::Table(section_data));
-                trace!("Return Ok");
-                return Ok(Vec::new());
+                trace!("Return Err");
+                return Err(format!("Key \"{}\" in section \"[{}]\" does not exist.", key, section));
             }
         } else {
 
             trace!("    false");
-            trace!("    Insert section and empty table");
-            let mut table = toml::Table::new();
-            table.insert(key.to_string(), toml::Value::Array(toml::Array::new()));
-            self.toml_data.insert(section.to_string(), toml::Value::Table(table));
-            trace!("Return Ok");
-            return Ok(Vec::new());
+            trace!("Return Err");
+            return Err(format!("Section \"[{}]\" does not exist.", section));
+        }
+    }
+
+    //Same as get_array() but crashes if key/value pair is missing as its required for the bot to function
+    pub fn get_array_required(&mut self, section: &str, key: &str) -> Vec<toml::Value> {
+        thread_trace!("config.rs: ConfigHandler::get_array_required(&mut self, \"{}\", \"{}\")", section, key);
+        match self.get_array(&section, &key) {
+            Ok(value) => {
+                thread_trace!("Return value");
+                return value
+            },
+            Err(err)  => {
+                thread_crash!("Error getting the value of \"{}\" from the config which is required: {}", key, err);
+            }
         }
     }
 
     //Is the user in the whitelist?
-    //TODO: return an error on get failure
     pub fn whitelist_validate_user(&mut self, user: String) -> bool {
 
         thread_trace!("config.rs: ConfigHandler::whitelist_validate_user(&mut self, \"{}\")", user);
 
         //Repo owner is always whitelisted
-        thread_trace!("  Get repo owner from config");
-        match ConfigHandler::get_string(self, "config", "github_owner_name") {
-            Ok(owner_name) => {
-                thread_trace!("    Is user the repo owner test");
-                if owner_name == user {
-                    thread_trace!("Return true");
-                    return true;
-                }
-            }
-            Err(_)         => {
-                //NOTE: This could be omitted once config validation is done.
-                thread_trace!("Return false (error getting the config)");
-                return false
-            }
+        let owner_name = self.get_string_required("config", "github_owner_name");
+        thread_trace!("  Is user the repo owner test");
+        if owner_name == user {
+            thread_trace!("Return true");
+            return true;
         }
 
-        let whitelist: Vec<toml::Value>;
-        match self.get_array("config", "whitelist") {
-            Ok(_whitelist) => whitelist = _whitelist,
-            Err(err)       => {thread_crash!("Error while getting the whitelist: {}", err);}
-        }
+        let whitelist = self.get_array_required("config", "whitelist");
 
         thread_trace!("whitelist.contains(\"{}\")", user);
         let is_valid_user = whitelist.contains(&toml::Value::String(user.clone()));
