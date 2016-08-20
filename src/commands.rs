@@ -61,6 +61,7 @@ impl CommandHandler {
         //Register commands
         let mut commands: BTreeMap<String, Command> = BTreeMap::new();
         commands.insert(String::from("ping"), Command::new(false, false, ping));
+        commands.insert(String::from("help"), Command::new(false, false, help));
 
         CommandHandler {
             config:   tsconfig.clone(),
@@ -115,7 +116,7 @@ impl CommandHandler {
             },
             None          => {
                 thread_trace!("Command does not exists, send response.");
-                respond(&self.config, webhook.clone(), String::from("Sorry the command was not found."));
+                respond(&self.config, webhook.clone(), String::from("Sorry the command was not found. Please visit [https://hunterbot.readthedocs.io](https://hunterbot.readthedocs.io) for available commands."));
                 return;
             }
         };
@@ -167,6 +168,11 @@ pub fn ping(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks::W
     return Ok(String::from("Pong"))
 }
 
+#[allow(unused_variables)]
+pub fn help(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks::WebhookEvent, args: Vec<&str>) -> Result<String, String> {
+    return Ok(String::from("Documentation related to the bot including available commands are at [https://hunterbot.readthedocs.io](https://hunterbot.readthedocs.io)"))
+}
+
 
 ////////////////////////////////////////////////////////////
 //                          Utils                         //
@@ -179,14 +185,14 @@ pub fn respond(tsconfig: &Arc<Mutex<config::ConfigHandler>>, raw_event: webhooks
     //TODO: Don't forget to change this when refactoring config
     //Get repo were following
     let github_follow_repo: String;
-    let github_owner_token: String;
+    let github_bot_token: String;
     {
         let mut config = tsconfig.lock().unwrap();
         github_follow_repo = config.get_string_required("config", "github_follow_repo");
-        github_owner_token = config.get_string_required("config", "github_bot_token");
+        github_bot_token = config.get_string_required("config", "github_bot_token");
     }
 
-    let endpoint = format!("repos/{}/issues/{}/comments?access_token={}", github_follow_repo, raw_event.number, github_owner_token);
+    let endpoint = format!("repos/{}/issues/{}/comments?access_token={}", github_follow_repo, raw_event.number, github_bot_token);
     let message  = format!("{{\"body\": \"@{} {}\"}}", raw_event.user, msg);
     match webhooks::github_post_request(endpoint, message) {
         Ok(())   => (),
