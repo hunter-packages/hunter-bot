@@ -526,7 +526,10 @@ pub fn register(config: &mut config::ConfigHandler) {
 
     //Skip secret number generation if we already made one before
     //Get webhook secret
-    let mut github_webhook_secret = config.get_string_required("state", "github_webhook_secret");
+    let mut github_webhook_secret = match config.get_string("state", "github_webhook_secret") {
+        Ok(secret) => secret,
+        Err(_)     => String::from("")
+    };
 
     if github_webhook_secret == String::new() {
         // Get the system RNG
