@@ -42,18 +42,11 @@ fn dir_path_validator(dir_path: String) -> Result<(), String> {
     match fs::metadata(&dir_path) {
         Ok(metadata) => {
             if !metadata.is_dir() {
-                let mut err_string = "\"".to_string();
-                err_string.push_str(dir_path.as_str());
-                err_string.push_str("\" is not a directory.");
-                return Err(err_string);
+                return Err(format!("\"{}\" is not a directory", dir_path.as_str()));
             }
         },
         Err(err)     => {
-            let mut err_string = "Failed to acquire metadata for \"".to_string();
-            err_string.push_str(dir_path.as_str());
-            err_string.push_str("\": ");
-            err_string.push_str(err.description());
-            return Err(err_string);
+            return Err(format!("Failed to acquire metedata for \"{}\": {}", dir_path.as_str(), err.description()));
         }
     }
 
@@ -74,19 +67,12 @@ fn dir_path_validator(dir_path: String) -> Result<(), String> {
                     match fs::remove_file(&tmp_file_path_buf) {
                         Ok(_)    => return Ok(()),
                         Err(err) => {
-                            let mut err_string = "Failed to delete temporary file: \"".to_string();
-                            err_string.push_str(&tmp_file_path);
-                            err_string.push_str("\": ");
-                            err_string.push_str(err.description());
-                            return Err(err_string);
+                            return Err(format!("Failed to delete temporary file: \"{}\": {}", tmp_file_path, err.description()));
                         }
                     }
                 }
                 Err(err) => {
-                    let mut err_string = "Invalid directory: \"".to_string();
-                    err_string.push_str(err.description());
-                    err_string.push_str("\"");
-                    return Err(err_string);
+                    return Err(format!("Invalid directory: \"{}\"", err.description()));
                 }
             }
         }

@@ -79,16 +79,15 @@ impl middleware::Handler for WebhookHandler {
 
         //Get signature
         thread_trace!("  Extract X-Hub-Signature header value");
-        let signature_string_header: String;
-        match extract_header_string(&request.headers, "X-Hub-Signature") {
-            Ok(signature) => signature_string_header = signature,
+        let signature_header = match extract_header_string(&request.headers, "X-Hub-Signature") {
+            Ok(signature) => signature,
             Err(err)      => return Ok(Response::with((status::InternalServerError, err)))
-        }
+        };
 
         //Verify webhook HMAC
         //FIXME: this is kinda messy
         //TODO:  tracing
-        match validate_webhook(&config, &signature_string_header, &body_string) {
+        match validate_webhook(&config, &signature_header, &body_string) {
             Ok(is_valid)  => {if !is_valid {return Ok(Response::with((status::BadRequest, "Invalid verification hash.")))}}
             Err(response) => {
                 thread_warn!("Received a github webhook with an invalid HMAC.");
@@ -97,26 +96,24 @@ impl middleware::Handler for WebhookHandler {
         }
 
         //Get X-GitHub-Event header value
-        let github_event_string: String;
-        match extract_header_string(&request.headers, "X-GitHub-Event") {
-            Ok(signature) => github_event_string = signature,
+        let github_event = match extract_header_string(&request.headers, "X-GitHub-Event") {
+            Ok(signature) => signature,
             Err(err)      => {
                 thread_error!("Failed to extract the \"X-GitHub-Event\" from a github webhook header: {}", err);
                 return Ok(Response::with((status::InternalServerError, err)))
             }
-        }
+        };
 
         //Parse the body
-        let body_value: serde_json::Value;
-        match serde_json::from_str(&body_string[..]) {
-            Ok(_body_value) => body_value = _body_value,
-            Err(err)        => {
+        let body_value = match serde_json::from_str(&body_string[..]) {
+            Ok(val)  => val,
+            Err(err) => {
                 thread_error!("{}", format!("Failed to parse the request body in a github webhook: {}.", err));
                 return Ok(Response::with((status::InternalServerError, format!("Failed to parse the request body: {}.", err))))
             }
-        }
+        };
 
-        let webhook_event_type = WebhookEventType::from_string(&github_event_string[..]);
+        let webhook_event_type = WebhookEventType::from_string(&github_event[..]);
         match webhook_event_type {
             WebhookEventType::Ping               => {
                 return Ok(Response::with((status::Ok, "Pong.")))
@@ -416,7 +413,7 @@ pub fn validate_webhook(tsconfig: &Arc<Mutex<config::ConfigHandler>>, header_str
 
     //Compute hmac
     thread_trace!("  Compute HMAC");
-    let hmac_array                = match hmac(Type::SHA1, github_webhook_secret.as_bytes(), body_string.as_bytes()) {
+    let hmac_array = match hmac(Type::SHA1, github_webhook_secret.as_bytes(), body_string.as_bytes()) {
         Ok(hmac) => hmac,
         Err(_)   => {
             thread_trace!("Return Err");
@@ -569,15 +566,14 @@ pub fn register(config: &mut config::ConfigHandler) {
     json_data.insert(String::from("config"), serde_json::Value::Object(json_data_config));
     json_data.insert(String::from("events"), serde_json::Value::Array(json_data_events));
 
-    let json_data_string: String;
-    match serde_json::to_string(&json_data) {
-        Ok(_json_data_string) => json_data_string = _json_data_string,
-        Err(err)              => {thread_crash!("Faild to create JSON data to initialize webhooks: {}", err.description());}
-    }
+    let json_data = match serde_json::to_string(&json_data) {
+        Ok(data) => data,
+        Err(err) => {thread_crash!("Faild to create JSON data to initialize webhooks: {}", err.description());}
+    };
 
     //Register webhooks
     let endpoint = format!("repos/{}/hooks?access_token={}", github_follow_repo, github_owner_token);
-    match github_post_request(endpoint, json_data_string) {
+    match github_post_request(endpoint, json_data) {
         Ok(())   => (),
         Err(err) => {thread_crash!("Failed to register webhooks: {}", err);}
     }
@@ -601,7 +597,7 @@ pub fn listen(config: &mut config::ConfigHandler) {
     for byte in local_ip_address.split(".") {
         let byte_parsed: u8 = match byte.parse() {
             Ok(byte) => byte,
-            Err(err) => {thread_crash!("Error parsing the ip address byte into a u8: {}.", err);}
+            Err(err) => {thread_crash!("Error parsing the ip address byte ({}) into a u8: {}.", byte, err);}
         };
         local_ip_address_num_vec.push(byte_parsed);
     }
